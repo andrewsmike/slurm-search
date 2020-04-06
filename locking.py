@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from fcntl import flock, LOCK_EX, LOCK_UN
 from functools import wraps
 from os.path import expanduser
+from time import time
 
 __all__ = [
     "have_lock",
@@ -17,7 +18,7 @@ __all__ = [
 ]
 
 def lock_file_path(lock_name):
-    return expanduser(f"~/tmp/{lock_name}.lock")
+    return expanduser(f"~/hyperparameters/search/{lock_name}.lock")
 
 _file_lock_paths = set()
 def have_lock(lock_name):
@@ -30,8 +31,14 @@ def lock(lock_name):
     )
     path = lock_file_path(lock_name)
     lock_file = open(path, "w")
+
+    start_time = time()
     flock(lock_file.fileno(), LOCK_EX)
     _file_lock_paths.add(path)
+    duration = time() - start_time
+
+    if duration > 0.1:
+        print(f"[lock:{lock_name}] Spent {round(duration,2)} seconds waiting for lock.")
 
     try:
         yield None

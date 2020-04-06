@@ -20,9 +20,9 @@ space = [
     hp.uniform("y", -2, 2),
 ]
 
-# Use at, cron, or what?
 def run_trials(session_name):
     if not search_session_exists(session_name):
+        print(f"[{session_name}] Initializing search.")
         create_search_session(
             session_name,
             space=space,
@@ -45,7 +45,7 @@ def display_stats(session_name):
 def main():
     session_name = "alpha"
 
-    print(f"[{session_name}] Initializing search.")
+    print(f"[{session_name}] Entering search.")
     try:
         run_trials(session_name)
     except:

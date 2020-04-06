@@ -5,7 +5,7 @@ and locking mechanisms. They automatically grab the appropriate locks and are
 specialized to hyperopt.
 """
 from copy import deepcopy
-from os import delete
+from time import sleep
 
 from hyperopt import fmin, tpe, rand, Trials, trials_from_docs
 
@@ -22,6 +22,7 @@ __all__ = [
 
 # State -> hyperopt -> state interactions.
 def state_next_trial(state):
+    sleep(4)
     prev_trials = state['trials']
     hyperopt_trials = trials_from_docs(prev_trials)
 
@@ -65,8 +66,6 @@ def state_updated_with_results(state, trial_id, hparams, results):
 
     next_state["trials"] = trials
 
-    print(len(state["trials"]), len(trials))
-
     return next_state
 
 def trials_exhausted(search_state):
@@ -109,8 +108,6 @@ def update_search_results(session_name, trial_id, hparams, results):
     """
     Atomically record results into session's state.
     """
-    write_out_big_results(trial_id, hparams, results)
-
     with lock(session_name):
         state = search_state(session_name)
 

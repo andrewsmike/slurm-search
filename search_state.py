@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 def search_state_path(session_name):
-    return expanduser(f"~/tmp/{session_name}_search_state.pickle")
+    return expanduser(f"~/hyperparameters/search/{session_name}_search_state.pickle")
 
 @needs_lock
 def search_state_exists(session_name):
