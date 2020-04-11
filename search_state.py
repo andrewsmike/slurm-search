@@ -5,15 +5,17 @@ These allow above methods to manipulate the search state as a pickle-able CRUD
 object.
 """
 
-from locking import lock, needs_lock
-
+from glob import glob
 from pickle import load, dump
 from os import remove
 from os.path import expanduser, exists
 
+from locking import lock, needs_lock
+
 __all__ = [
     "create_search_state",
     "search_state_exists",
+    "search_state_session_names",
     "search_state",
     "update_search_state",
     "delete_search_state",
@@ -21,6 +23,18 @@ __all__ = [
 
 def search_state_path(session_name):
     return expanduser(f"~/hyperparameters/search/{session_name}_search_state.pickle")
+
+def path_search_session_name(path):
+    return path.split("/")[-1].split("_search_state.pickle")[0]
+
+def search_state_session_names():
+    search_state_pattern = expanduser(f"~/hyperparameters/search/*_search_state.pickle")
+    search_state_paths = glob(search_state_pattern)
+    return [
+        path_search_session_name(search_state_path)
+        for search_state_path in search_state_paths
+    ]
+
 
 @needs_lock
 def search_state_exists(session_name):

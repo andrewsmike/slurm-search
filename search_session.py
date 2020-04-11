@@ -15,10 +15,13 @@ from search_state import *
 __all__ = [
     "create_search_session",
     "search_session_exists",
+    "search_session_names",
+    "search_session_active",
     "next_search_trial",
     "update_search_results",
     "delete_search_session",
 ]
+
 
 # State -> hyperopt -> state interactions.
 def state_next_trial(state):
@@ -71,13 +74,40 @@ def state_updated_with_results(state, trial_id, hparams, results):
 def trials_exhausted(search_state):
     return (
         len(search_state["trials"]) >= search_state.get("max_evals", 1e18)
+        or search_state["status"] != "active"
         # TODO: Timeout.
+    )
+
+def all_trials_complete(search_state):
+    return all(
+        trial["result"]["status"] == "ok"
+        for trial in state["trials"]
     )
 
 # Outwards facing functions.
 def search_session_exists(session_name):
     with lock(session_name):
         return search_state_exists(session_name)
+
+def search_session_active(session_name):
+    """
+    Sessions that are marked as active and still have additional trials to assign.
+    These exclude sessions that are just waiting on the final round of
+    results.
+    When we store slurm job info in the search state, we can get more featureful.
+    """
+    with lock(session_name):
+        state = search_state(session_name)
+        return (
+            state["status"] == "active"
+            and not trials_exhausted(state)
+        )
+
+def search_session_names():
+    return [
+        for session_name in search_state_session_names()
+        if search_session_active(session_name)
+    ]
 
 def create_search_session(session_name, **args):
     with lock(session_name):
@@ -94,6 +124,7 @@ def next_search_trial(session_name):
         state = search_state(session_name)
 
         if trials_exhausted(state):
+            print("No more trials to run.")
             raise ValueError(
                 "No more trials to run."
             )
@@ -113,6 +144,15 @@ def update_search_results(session_name, trial_id, hparams, results):
 
         state = state_updated_with_results(state, trial_id, hparams, results)
 
+        if trials_exhausted(state) and all_trials_complete(state):
+            state["status"] = "complete"
+
+        update_search_state(session_name, state)
+
+def disable_search_session(session_name):
+    with lock(session_name):
+        state = search_state(session_name)
+        state["status"] = "disabled"
         update_search_state(session_name, state)
 
 def delete_search_session(session_name):
