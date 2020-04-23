@@ -3,6 +3,10 @@ Search session interactions.
 These functions implement a distributed search session API over the search state
 and locking mechanisms. They automatically grab the appropriate locks and are
 specialized to hyperopt.
+
+There are two types of functions: Session management (list, create, delete,
+check status, etc) and experiment interactions (get next hparam and progress
+hyperopt state, record results in state.)
 """
 from copy import deepcopy
 from time import sleep
@@ -14,16 +18,20 @@ from search_state import *
 
 __all__ = [
     "create_search_session",
+    "delete_search_session",
+    "delete_active_search_trials",
+    "disable_search_session",
+    "enable_search_session",
+    "next_search_trial",
+    "search_session_objective",
+    "search_session_active",
     "search_session_exists",
     "search_session_names",
-    "search_session_active",
-    "next_search_trial",
+    "search_session_progress",
     "update_search_results",
-    "delete_search_session",
 ]
 
 
-# State -> hyperopt -> state interactions.
 def state_next_trial(state):
     sleep(4)
     prev_trials = state['trials']
@@ -60,15 +68,24 @@ def state_next_trial(state):
 
 def state_updated_with_results(state, trial_id, hparams, results):
     next_state = dict(state)
+
+    updated = 0
+
     trials = []
     for trial in state["trials"]:
         if trial["tid"] == trial_id:
             trial = dict(trial)
             trial["result"] = results
+            updated += 1
         trials.append(trial)
 
-    next_state["trials"] = trials
+    if updated == 0:
+        print("Trial wasn't in trials object.")
+        raise ValueError("Trial record was deleted, failed to record results.")
+    elif updated > 1:
+        raise ValueError("Multiple trial records for the same trial ID.")
 
+    next_state["trials"] = trials
     return next_state
 
 def trials_exhausted(search_state):
@@ -81,40 +98,31 @@ def trials_exhausted(search_state):
 def all_trials_complete(search_state):
     return all(
         trial["result"]["status"] == "ok"
-        for trial in state["trials"]
+        for trial in search_state["trials"]
     )
 
-# Outwards facing functions.
-def search_session_exists(session_name):
-    with lock(session_name):
-        return search_state_exists(session_name)
+def trial_active(trial):
+    return (trial["result"].get("status", None) != "ok")
 
-def search_session_active(session_name):
-    """
-    Sessions that are marked as active and still have additional trials to assign.
-    These exclude sessions that are just waiting on the final round of
-    results.
-    When we store slurm job info in the search state, we can get more featureful.
-    """
-    with lock(session_name):
-        state = search_state(session_name)
-        return (
-            state["status"] == "active"
-            and not trials_exhausted(state)
-        )
-
-def search_session_names():
-    return [
-        for session_name in search_state_session_names()
-        if search_session_active(session_name)
+def state_without_active_trials(search_state):
+    next_state = dict(search_state)
+    next_state["trials"] = [
+        trial
+        for trial in search_state["trials"]
+        if not trial_active(trial)
     ]
 
-def create_search_session(session_name, **args):
+    return next_state
+
+##############################
+# Outwards facing functions. #
+##############################
+
+# Search / trial interactions.
+def search_session_objective(session_name):
     with lock(session_name):
-        create_search_state(
-            session_name,
-            dict(**args, **{"trials": []}),
-        )
+        state = search_state(session_name)
+        return state["objective"]
 
 def next_search_trial(session_name):
     """
@@ -149,10 +157,77 @@ def update_search_results(session_name, trial_id, hparams, results):
 
         update_search_state(session_name, state)
 
+def delete_active_search_trials(session_name):
+    with lock(session_name):
+        state = search_state(session_name)
+
+        scrubbed_state = state_without_active_trials(state)
+
+        update_search_state(session_name, scrubbed_state)
+
+# Session management.
+def search_session_exists(session_name):
+    with lock(session_name):
+        return search_state_exists(session_name)
+
+def search_session_active(session_name):
+    """
+    An active search session does not have all its results yet.
+    It may have exhausted its trials, and be waiting on workers.
+    Its workers may have been killed anomalously.
+    """
+    with lock(session_name):
+        state = search_state(session_name)
+        return state["status"] == "active"
+
+def search_session_progress(session_name):
+    with lock(session_name):
+        state = search_state(session_name)
+        trials = state["trials"]
+        return {
+            "session_name": session_name,
+            "status": state["status"],
+            "max_trials": state["max_evals"],
+            "completed": sum(
+                1
+                for trial in trials
+                if not trial_active(trial)
+            ),
+            "running": sum(
+                1
+                for trial in trials
+                if trial_active(trial)
+            ),
+        }
+
+
+def search_session_names(including_inactive=False):
+    return [
+        session_name
+        for session_name in search_state_session_names()
+        if including_inactive or search_session_active(session_name)
+    ]
+
+def create_search_session(session_name, **args):
+    with lock(session_name):
+        create_search_state(
+            session_name,
+            dict(**args, **{
+                "trials": [],
+                "status": "active",
+            }),
+        )
+
 def disable_search_session(session_name):
     with lock(session_name):
         state = search_state(session_name)
         state["status"] = "disabled"
+        update_search_state(session_name, state)
+
+def enable_search_session(session_name):
+    with lock(session_name):
+        state = search_state(session_name)
+        state["status"] = "active"
         update_search_state(session_name, state)
 
 def delete_search_session(session_name):

@@ -7,7 +7,7 @@ object.
 
 from glob import glob
 from pickle import load, dump
-from os import remove
+from os import makedirs, remove
 from os.path import expanduser, exists
 
 from locking import lock, needs_lock
@@ -46,6 +46,9 @@ def create_search_state(session_name, state):
         f"Search state '{session_name}' already exists. " +
         "Please remove or kill_search_state() it to continue."
     )
+
+    makedirs(search_state_dir(session_name), exist_ok=False)
+
     update_search_state(
         session_name,
         state,
