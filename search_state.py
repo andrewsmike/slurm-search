@@ -22,13 +22,15 @@ __all__ = [
 ]
 
 def search_state_path(session_name):
-    return expanduser(f"~/hyperparameters/search/{session_name}_search_state.pickle")
+    return expanduser(f"~/hyperparameters/sessions/{session_name}/search_state.pickle")
+def search_state_dir(session_name):
+    return expanduser(f"~/hyperparameters/sessions/{session_name}")
 
 def path_search_session_name(path):
-    return path.split("/")[-1].split("_search_state.pickle")[0]
+    return path.split("/")[-2]
 
 def search_state_session_names():
-    search_state_pattern = expanduser(f"~/hyperparameters/search/*_search_state.pickle")
+    search_state_pattern = expanduser(f"~/hyperparameters/sessions/*/search_state.pickle")
     search_state_paths = glob(search_state_pattern)
     return [
         path_search_session_name(search_state_path)

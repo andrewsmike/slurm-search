@@ -88,11 +88,11 @@ def write_slurm_script(path, slurm_args, command):
 
 def launch_slurm_script(script_path):
     run(['sbatch', script_path])
-    
+
 def launch_slurm_search_workers(session_name, iteration):
 
-    SESSION_DIR = f"sessions/{session_name}/"
-    
+    SESSION_DIR = expanduser(f"~/hyperparameters/sessions/{session_name}/")
+
     OUTPUT_DIR = join(SESSION_DIR, "logs")
     makedirs(OUTPUT_DIR, exist_ok=True)
 
