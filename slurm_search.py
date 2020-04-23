@@ -90,23 +90,32 @@ def launch_slurm_script(script_path):
     run(['sbatch', script_path])
 
 def launch_slurm_search_workers(session_name, iteration):
-
     SESSION_DIR = expanduser(f"~/hyperparameters/sessions/{session_name}/")
 
     OUTPUT_DIR = join(SESSION_DIR, "logs")
     makedirs(OUTPUT_DIR, exist_ok=True)
 
-    thread_count = 4
+
+    dev_thread_count = 4
 
     slurm_args = {
         "job-name": slurm_job_name(session_name, iteration),
         "output": join(OUTPUT_DIR, f"worker_{iteration}_%a.out"),
         "error": join(OUTPUT_DIR, f"worker_{iteration}_%a.err"),
-        "array": f"0-{thread_count - 1}",
+        "array": f"0-{dev_thread_count - 1}",
         "ntasks": 1,
         "mem-per-cpu": 10,
-        #"gres": "gpu:1",
     }
+
+    dev_environment = getenv("HOSTNAME", None) == "ernie"
+    if not dev_environment:
+        thread_count = 4 # Temporary.
+        slurm_args.update({
+            "mem-per-cpu": 4000,
+            "partition": "1080ti-short",
+            "gres": "gpu:1",
+            "array": f"0-{thread_count - 1}",
+        })
 
     script_path = join(SESSION_DIR, f"launch_slurm_{session_name}_{iteration}.sh")
 
