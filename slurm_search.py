@@ -56,7 +56,7 @@ def launch_parallel_search_workers(session_name):
     Wait for them to terminate.
     """
     worker_command = ["python3", "slurm_search.py", "work_on", session_name]
-    PARALLELISM = 4
+    PARALLELISM = 8
     workers = [
         Popen(worker_command)
         for i in range(PARALLELISM)
@@ -147,7 +147,7 @@ def start_slurm_search():
         space=demo_space,
         objective=demo_objective,
         algo="tpe",
-        max_evals=40,
+        max_evals=400,
     )
 
     print(f"[{session_name}] Launching workers...")
