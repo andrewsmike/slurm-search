@@ -9,7 +9,6 @@ check status, etc) and experiment interactions (get next hparam and progress
 hyperopt state, record results in state.)
 """
 from copy import deepcopy
-from time import sleep
 
 from hyperopt import fmin, tpe, rand, Trials, trials_from_docs
 
@@ -33,7 +32,6 @@ __all__ = [
 
 
 def state_next_trial(state):
-    sleep(4)
     prev_trials = state['trials']
     hyperopt_trials = trials_from_docs(prev_trials)
 

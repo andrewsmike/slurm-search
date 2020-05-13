@@ -10,6 +10,7 @@ from sys import argv, exit
 from time import sleep
 
 from locking import lock
+from objectives import search_session_args
 from random_phrase import random_phrase
 from search_session import (
     create_search_session,
@@ -95,7 +96,6 @@ def launch_slurm_search_workers(session_name, iteration):
     OUTPUT_DIR = join(SESSION_DIR, "logs")
     makedirs(OUTPUT_DIR, exist_ok=True)
 
-
     dev_thread_count = 4
 
     slurm_args = {
@@ -109,7 +109,7 @@ def launch_slurm_search_workers(session_name, iteration):
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
     if not dev_environment:
-        thread_count = 4 # Temporary.
+        thread_count = 8 # Temporary.
         slurm_args.update({
             "mem-per-cpu": 4000,
             "partition": "1080ti-short",
@@ -125,33 +125,20 @@ def launch_slurm_search_workers(session_name, iteration):
 
     launch_slurm_script(script_path)
 
-demo_space = [
-    hp.uniform("x", -2, 2),
-    hp.uniform("y", -2, 2),
-]
-
-def demo_objective(spec):
-    x, y = spec
-    sleep(4)
-    return {
-        "loss": x ** 2 + y ** 2,
-        "status": "ok",
-    }
-
-def start_slurm_search():
+def start_slurm_search(search_type, *args):
     session_name = random_phrase()
-    print(f"[{session_name}] Creating a new search session.")
+    print(f"[{session_name}] Creating a new {search_type} search session.")
+
+    search_args = search_session_args(search_type, *args)
 
     create_search_session(
         session_name,
-        space=demo_space,
-        objective=demo_objective,
-        algo="tpe",
-        max_evals=400,
+        **search_args
     )
 
     print(f"[{session_name}] Launching workers...")
     launch_slurm_search_workers(session_name, iteration=1)
+
 
 def restart_slurm_search(session_name):
     delete_active_search_trials(session_name)
