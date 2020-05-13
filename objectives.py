@@ -87,13 +87,11 @@ def ale_objective(spec):
         write_loss=False,
     )
 
-    mil = 1000 * 1000
-
     runner = SingleEnvRunner(
         customized_agent_func,
         env,
-        frames=10 * mil,
-        episodes=np.inf,
+        frames=spec["frames"],
+        episodes=spec["episodes"],
         render=False,
         quiet=False,
         writer=writer,
@@ -126,7 +124,9 @@ def ale_search_session_args(*args):
     default_config = {
         "objective": ale_objective,
         "algo": "tpe",
-        "max_evals": 10,
+        "max_evals": 16,
+        "frames": 1 * (1000 * 1000),
+        "episodes": 1,
     }
 
     config = default_config.update(
