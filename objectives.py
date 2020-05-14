@@ -11,9 +11,8 @@ from hyperopt import hp
 import numpy as np
 
 from all.environments import AtariEnvironment, GymEnvironment
-from all.logging import ExperimentWriter
+from all.experiments import SingleEnvExperiment
 from all.presets import atari, classic_control, continuous
-from all.runner import SingleEnvRunner
 
 __all__ = [
     "search_session_args",
@@ -75,29 +74,27 @@ def ale_objective(spec):
         "continuous": continuous,
         "atari": atari,
     }[agent_type]
-
     agent_func = getattr(agent_mod, agent_name)
-    customized_agent_func = (
-        lambda env, writer: agent(env, writer, **spec["agent_args"])
+
+    agent = agent_func(
+        device="cuda",
+        **spec["agent_args"],
     )
 
-    writer = ExperimentWriter(
-        agent_name,
-        env_name,
+    experiment = SingleEnvExperiment(
+        agent,
+        env,
+        render=False,
+        quiet=True,
         write_loss=False,
     )
-
-    runner = SingleEnvRunner(
-        customized_agent_func,
-        env,
+    experiment.train(
         frames=spec["frames"],
         episodes=spec["episodes"],
-        render=False,
-        quiet=False,
-        writer=writer,
     )
-
-    value = last_100_returns_mean(writer)
+    returns = experiment.test(
+        episodes=spec["test_episodes"],
+    )
 
     return value
 
@@ -111,13 +108,13 @@ def config_from_args(args):
 def state_from_config(config):
     return {
         "agent_args": {
-            "discount_factor": hp.uniform(0.95, 0.9999),
+            "lr": hp.uniform(0.95, 0.9999),
         }
     }
     # "a2c"
     # "CartPole-v0"
     # "gym"
-    # "discount_factor"
+    # "lr"
 
 def ale_search_session_args(*args):
     # agent, env, env_type to start.
@@ -125,8 +122,10 @@ def ale_search_session_args(*args):
         "objective": ale_objective,
         "algo": "tpe",
         "max_evals": 16,
+
         "frames": 1 * (1000 * 1000),
         "episodes": 1,
+        "test_episodes": 100,
     }
 
     config = default_config.update(
