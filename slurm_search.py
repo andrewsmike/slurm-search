@@ -10,7 +10,11 @@ from sys import argv, exit
 from time import sleep
 
 from locking import lock
-from objectives import search_session_args
+from objectives import (
+    ale_objective,
+    demo_objective,
+    search_session_args,
+)
 from random_phrase import random_phrase
 from search_session import (
     create_search_session,
@@ -21,7 +25,7 @@ from search_session import (
     search_session_objective,
     search_session_progress,
     update_search_results,
-    next_search_trial
+    next_search_trial,
 )
 from search_state import search_state
 
@@ -109,7 +113,7 @@ def launch_slurm_search_workers(session_name, iteration):
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
     if not dev_environment:
-        thread_count = 8 # Temporary.
+        thread_count = 4 # Temporary.
         slurm_args.update({
             "mem-per-cpu": 4000,
             "partition": "1080ti-short",

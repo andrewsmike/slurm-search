@@ -2,6 +2,8 @@
 Objectives to search over.
 Each objective has some callable evaluation function and a CLI invocation
 decoding function that generates the appropriate search session config.
+
+ALL OBJECTIVES MUST BE IMPORTED INTO THE MAIN MODULE FOR PICKLE LOADING.
 """
 from csv import reader
 from os.path import join
@@ -15,6 +17,8 @@ from all.experiments import SingleEnvExperiment
 from all.presets import atari, classic_control, continuous
 
 __all__ = [
+    "ale_objective",
+    "demo_objective",
     "search_session_args",
 ]
 
@@ -99,16 +103,16 @@ def ale_objective(spec):
     return value
 
 def config_from_args(args):
-    config = {
+    return {
         key: value
         for arg in args
-        for key, val in (arg.strip().split("="), )
+        for key, value in (arg.strip().split("="), )
     }
 
 def state_from_config(config):
     return {
         "agent_args": {
-            "lr": hp.uniform(0.95, 0.9999),
+            "lr": hp.uniform("lr", 0.95, 0.9999),
         }
     }
     # "a2c"
@@ -118,7 +122,7 @@ def state_from_config(config):
 
 def ale_search_session_args(*args):
     # agent, env, env_type to start.
-    default_config = {
+    config = {
         "objective": ale_objective,
         "algo": "tpe",
         "max_evals": 16,
@@ -128,10 +132,10 @@ def ale_search_session_args(*args):
         "test_episodes": 100,
     }
 
-    config = default_config.update(
+    config.update(
         config_from_args(args)
     )
 
     config["state"] = state_from_config(config)
 
-    return [config]
+    return config
