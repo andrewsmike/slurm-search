@@ -102,11 +102,17 @@ def all_trials_complete(search_state):
 def trial_active(trial):
     return (trial["result"].get("status", None) != "ok")
 
+def trial_with_tid(trial, new_tid):
+    new_trial = deepcopy(trial)
+    new_trial["tid"] = new_tid
+    new_trial["misc"]["tid"] = new_tid
+    return new_trail
+
 def state_without_active_trials(search_state):
     next_state = dict(search_state)
     next_state["trials"] = [
-        trial
-        for trial in search_state["trials"]
+        trial_with_tid(trial, new_tid)
+        for new_tid, trial in enumerate(search_state["trials"])
         if not trial_active(trial)
     ]
 
@@ -159,9 +165,9 @@ def delete_active_search_trials(session_name):
     with lock(session_name):
         state = search_state(session_name)
 
-        scrubbed_state = state_without_active_trials(state)
+        scrubbed_minimized_state = state_without_active_trials(state)
 
-        update_search_state(session_name, scrubbed_state)
+        update_search_state(session_name, scrubbed_minimized_state)
 
 # Session management.
 def search_session_exists(session_name):
