@@ -9,6 +9,7 @@ check status, etc) and experiment interactions (get next hparam and progress
 hyperopt state, record results in state.)
 """
 from copy import deepcopy
+from datetime import datetime
 
 from hyperopt import fmin, tpe, rand, Trials, trials_from_docs
 
@@ -31,7 +32,7 @@ __all__ = [
 ]
 
 
-def state_next_trial(state):
+def state_next_trial(state, worker_id):
     prev_trials = state['trials']
     hyperopt_trials = trials_from_docs(prev_trials)
 
@@ -56,22 +57,24 @@ def state_next_trial(state):
             max_evals=len(prev_trials) + 1,
             show_progressbar=False,
         )
-    except:
+    except Exception as e:
         pass
+
+    new_trial[0]["worker_id"] = worker_id
 
     next_state = dict(state)
     next_state['trials'] = prev_trials + [new_trial[0]]
 
     return (new_trial[0]["tid"], new_hparams[0]), next_state
 
-def state_updated_with_results(state, trial_id, hparams, results):
+def state_updated_with_results(state, trial_id, worker_id, hparams, results):
     next_state = dict(state)
 
     updated = 0
 
     trials = []
     for trial in state["trials"]:
-        if trial["tid"] == trial_id:
+        if trial["tid"] == trial_id and trial["worker_id"] == worker_id:
             trial = dict(trial)
             trial["result"] = results
             updated += 1
@@ -81,7 +84,7 @@ def state_updated_with_results(state, trial_id, hparams, results):
         print("Trial wasn't in trials object.")
         raise ValueError("Trial record was deleted, failed to record results.")
     elif updated > 1:
-        raise ValueError("Multiple trial records for the same trial ID.")
+        raise ValueError("Multiple trial records for the same trial ID & worker.")
 
     next_state["trials"] = trials
     return next_state
@@ -106,7 +109,7 @@ def trial_with_tid(trial, new_tid):
     new_trial = deepcopy(trial)
     new_trial["tid"] = new_tid
     new_trial["misc"]["tid"] = new_tid
-    return new_trail
+    return new_trial
 
 def state_without_active_trials(search_state):
     next_state = dict(search_state)
@@ -128,7 +131,7 @@ def search_session_objective(session_name):
         state = search_state(session_name)
         return state["objective"]
 
-def next_search_trial(session_name):
+def next_search_trial(session_name, worker_id):
     """
     Atomically decide the next hparam values and progress the session state.
     """
@@ -141,20 +144,26 @@ def next_search_trial(session_name):
                 "No more trials to run."
             )
 
-        (trial_id, trial_hparams), next_state = state_next_trial(state)
+        (trial_id, trial_hparams), next_state = state_next_trial(state, worker_id)
 
         update_search_state(session_name, next_state)
 
     return trial_id, trial_hparams
 
-def update_search_results(session_name, trial_id, hparams, results):
+def update_search_results(session_name, trial_id, worker_id, hparams, results):
     """
     Atomically record results into session's state.
     """
     with lock(session_name):
         state = search_state(session_name)
 
-        state = state_updated_with_results(state, trial_id, hparams, results)
+        state = state_updated_with_results(
+            state,
+            trial_id,
+            worker_id,
+            hparams,
+            results,
+        )
 
         if trials_exhausted(state) and all_trials_complete(state):
             state["status"] = "complete"
@@ -212,13 +221,14 @@ def search_session_names(including_inactive=False):
         if including_inactive or search_session_active(session_name)
     ]
 
-def create_search_session(session_name, **args):
+def create_search_session(session_name, start_time=None, **args):
     with lock(session_name):
         create_search_state(
             session_name,
             dict(**args, **{
                 "trials": [],
                 "status": "active",
+                "start_time": datetime.now(),
             }),
         )
 

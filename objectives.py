@@ -13,7 +13,7 @@ from hyperopt import hp
 import numpy as np
 
 from all.environments import AtariEnvironment, GymEnvironment
-from all.experiments import SingleEnvExperiment
+from all.experiments import SingleEnvExperiment, ParallelEnvExperiment
 from all.presets import atari, classic_control, continuous
 
 __all__ = [
@@ -60,7 +60,8 @@ def last_100_returns_mean(writer):
     return last_100_returns_mean
 
 def ale_objective(spec):
-    spec, = spec
+    spec, = spec # Unwrap the spec.
+
     agent_name = spec["agent"]
     env_name = spec["env"]
     agent_type = spec["type"]
@@ -85,57 +86,100 @@ def ale_objective(spec):
         **spec["agent_args"],
     )
 
-    experiment = SingleEnvExperiment(
-        agent,
-        env,
-        render=False,
-        quiet=True,
-        write_loss=False,
-    )
-    experiment.train(
-        frames=spec["frames"],
-        episodes=spec["episodes"],
-    )
-    returns = experiment.test(
-        episodes=spec["test_episodes"],
-    )
+    returns = []
+    for i in range(spec["runs_per_setting"]):
+        experiment = ParallelEnvExperiment(
+            agent,
+            env,
+            render=False,
+            quiet=True,
+            write_loss=False,
+        )
+
+        experiment.train(
+            frames=spec["frames"],
+            episodes=spec["episodes"],
+        )
+        returns.extend(experiment.test(
+            episodes=spec["test_episodes"],
+        ))
+        del experiment
+
+    returns = np.array(returns)
+    print(f"Returns: {returns.mean()} +/- {returns.std()}")
+
+    return {
+        "returns_mean": returns.mean(),
+        "returns_std": returns.std(),
+        "loss": - returns.mean(),
+        "status": "ok",
+    }
+
+def parsed_value(value):
+    try:
+        return int(value)
+    except:
+        pass
+
+    try:
+        return float(value)
+    except:
+        pass
 
     return value
 
 def config_from_args(args):
     return {
-        key: value
+        key.lstrip("-"): parsed_value(value)
         for arg in args
         for key, value in (arg.strip().split("="), )
     }
 
-def state_from_config(config):
-    return {
-        "agent_args": {
-            "lr": hp.uniform("lr", 0.95, 0.9999),
-        }
-    }
-    # "a2c"
-    # "CartPole-v0"
-    # "gym"
-    # "lr"
+def unflattened_dict(flattened_dict, delim=":"):
+    result = {}
+    for path, value in flattened_dict.items():
+        path_parts = path.split(delim)
+        key, rest = path_parts[0], path_parts[1:]
+        result.setdefault(key, {})[delim.join(rest)] = value
 
+    return {
+        key: (
+            unflattened_dict(value)
+            if "" not in value else
+            value[""]
+        )
+        for key, value in result.items()
+    }
+
+
+# Example:
+# slurm_search.py start ale type=classic agent=a2c env=CartPole-v0
 def ale_search_session_args(*args):
-    # agent, env, env_type to start.
+    space_spec = {
+        "frames": 100 * (1000),
+        "episodes": 1000,
+        "test_episodes": 100,
+        "runs_per_setting": 32,
+
+        "agent_args": {
+            "lr": 1 - hp.loguniform("one_minus_lr", -4, -1),
+        },
+    }
+
+    space_spec.update(
+        unflattened_dict(config_from_args(args), delim=":")
+    )
+
+    search_args = space_spec.get("search", {})
+    del space_spec["search"]
+
     config = {
         "objective": ale_objective,
         "algo": "tpe",
-        "max_evals": 16,
-
-        "frames": 1 * (1000 * 1000),
-        "episodes": 1,
-        "test_episodes": 100,
+        "max_evals": 12,
+        "space": [space_spec], # Wrapped because hyperopt is weird.
     }
 
-    config.update(
-        config_from_args(args)
-    )
-
-    config["state"] = state_from_config(config)
+    config.update(search_args)
 
     return config

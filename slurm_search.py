@@ -29,7 +29,8 @@ from search_session import (
 )
 from search_state import search_state
 
-from hyperopt import hp
+from hyperopt import hp, space_eval
+import numpy as np
 
 # for use in timing code.
 MINUTE = 60
@@ -115,9 +116,12 @@ def launch_slurm_search_workers(session_name, iteration):
     if not dev_environment:
         thread_count = 4 # Temporary.
         slurm_args.update({
-            "mem-per-cpu": 4000,
-            "partition": "1080ti-short",
+            #"mem-per-cpu": 300,
+            #"time": "05:00",
+            "time": "02:10:00",
+            "mem-per-cpu": 2000,
             "gres": "gpu:1",
+            "partition": "1080ti-short",
             "array": f"0-{thread_count - 1}",
         })
 
@@ -149,13 +153,14 @@ def restart_slurm_search(session_name):
     enable_search_session(session_name)
     launch_slurm_search_workers(session_name, iteration=1)
 
-def stop_slurm_search(session_name):
-    disable_search_session(session_name)
-    print("Disabled search. No more trials will start.")
+def stop_slurm_searches(*session_names):
+    for session_name in session_names:
+        disable_search_session(session_name)
+        print(f"[{session_name}] Disabled search. No more trials will start.")
     print("TODO: You may want to kill the remaining slurm workers. They could take a while to die off.")
 
 def display_slurm_searches(show_inactive=False):
-    print("Active sessions (TODO: May not have workers):")
+    print("Active sessions (may not have workers):")
     rows =[
         search_session_progress(session_name)
         for session_name in search_session_names(including_inactive=bool(show_inactive))
@@ -165,10 +170,55 @@ def display_slurm_searches(show_inactive=False):
         rows=rows,
     )
 
+def unwrapped_settings(settings):
+    return {
+        key: (value
+              if not isinstance(value, list)
+                  and len(value) == 0
+              else value[0])
+        for key, value in settings.items()
+    }
+
+def display_results_summary(session_name, space, trials):
+    results = [
+        (
+            unwrapped_settings(trial["misc"]["vals"]),
+            trial["result"]["loss"],
+        )
+        for trial in trials
+        if "loss" in trial["result"]
+    ]
+    if not results:
+        return
+
+    losses = np.array([
+        loss
+        for setting, loss in results
+    ])
+    print(f"[{session_name}] Loss dist: {min(losses):.4} <= {losses.mean():.4} " +
+          f"+/- {losses.std():.4} <= {max(losses):.4}")
+
+
+    best_setting, best_loss = min(results, key=lambda trial: trial[1])
+    print(f"[{session_name}] Best setting: {best_setting} => " +
+          f"Loss={best_loss:.4}. Spec:")
+    pprint(space_eval(space, best_setting))
+
+    worst_setting, worst_loss = max(results, key=lambda trial: trial[1])
+    print(f"[{session_name}] Worst setting: {worst_setting} => " +
+          f"Loss={worst_loss:.4}. Spec:")
+    pprint(space_eval(space, worst_setting))
+
 def display_slurm_search_state(session_name):
     with lock(session_name):
         state = search_state(session_name)
         pprint(state)
+        if len(state.get("trials", [])) > 0:
+            display_results_summary(
+                session_name,
+                state["space"],
+                state["trials"],
+            )
 
 def inspect_slurm_search_state(session_name):
     with lock(session_name):
@@ -185,7 +235,7 @@ def inspect_slurm_search_state(session_name):
 def display_search_session_logs(session_name):
     logs_dir = expanduser(f"~/hyperparameters/sessions/{session_name}/logs")
     log_files = glob(join(logs_dir, "*"))
-    run(["cat"] + log_files)
+    run(["tail", "-n", "+1"] + log_files)
 
 
 def work_on_slurm_search(session_name):
@@ -196,15 +246,23 @@ def work_on_slurm_search(session_name):
     # It must be available to pickle during load()ing.
     objective = search_session_objective(session_name)
 
+    worker_id = slurm_worker_id()
+
     try:
         while True:
             print(f"[{session_name}] Getting next trial.", flush=True)
-            trial_id, trial_hparams = next_search_trial(session_name)
+            trial_id, trial_hparams = next_search_trial(session_name, worker_id)
             print(f"[{session_name}] Next trial: {trial_id}:{trial_hparams}.", flush=True)
             results = objective(trial_hparams)
             print(f"[{session_name}] Writing back results: " +
                   f"{trial_id}:{trial_hparams} => {results['loss']}.", flush=True)
-            update_search_results(session_name, trial_id, trial_hparams, results)
+            update_search_results(
+                session_name,
+                trial_id,
+                worker_id,
+                trial_hparams,
+                results,
+            )
             print(f"[{session_name}] Results recorded.", flush=True)
     except ValueError as e:
         print(f"Hit exception: {e}")
@@ -217,12 +275,16 @@ def slurm_iteration():
         return None
 
 def slurm_array_task_index():
-    return int(getenv("SLURM_ARRAY_TASK_ID"))
+    return int(getenv("SLURM_ARRAY_TASK_ID")) or None
+
+def slurm_worker_id():
+    job_id = getenv("SLURM_JOB_ID", "UNKNOWN")
+    return f"{job_id}_{slurm_array_task_index() or 0}"
 
 def launch_next_generation(session_name, iteration):
     print("Waiting for other workers to quit...")
     # TODO: Wait properly
-    sleep(10)
+    sleep(2 * MINUTE)
 
     print("Clearing incomplete trials...")
     delete_active_search_trials(session_name)
@@ -236,7 +298,7 @@ def launch_next_generation(session_name, iteration):
 
 def generational_work_on_slurm_search(
         session_name,
-        timeout=2*MINUTE,
+        timeout=2 * HOUR,
         max_iters=5,
 ):
     iteration = slurm_iteration()
@@ -281,7 +343,7 @@ def main(args):
         "list": display_slurm_searches,
         "start": start_slurm_search,
         "restart": restart_slurm_search,
-        "stop": stop_slurm_search,
+        "stop": stop_slurm_searches,
         "show": display_slurm_search_state,
         "inspect_state": inspect_slurm_search_state,
         "logs": display_search_session_logs,
