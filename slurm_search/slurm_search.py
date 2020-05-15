@@ -129,7 +129,7 @@ def launch_slurm_search_workers(session_name, iteration):
     script_path = join(SESSION_DIR, f"launch_slurm_{session_name}_{iteration}.sh")
 
     write_slurm_script(script_path, slurm_args, [
-        "python3", argv[0], "generational_work_on", session_name,
+        "ssearch", "generational_work_on", session_name,
     ])
 
     launch_slurm_script(script_path)
