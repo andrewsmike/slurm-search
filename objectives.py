@@ -50,15 +50,6 @@ def demo_search_session_args(*args):
         "max_evals": 400,
     }
 
-# Invoking an ALE runner.
-def last_100_returns_mean(writer):
-    records_path = join(writer.log_dir, writer.env_name, "returns100.csv")
-    with open(records_path, "r") as f:
-        lines = list(reader(f))
-
-    last_frame, last_100_returns_mean, last_100_returns_std = lines[-1]
-    return last_100_returns_mean
-
 def ale_objective(spec):
     spec, = spec # Unwrap the spec.
 
