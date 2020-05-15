@@ -11,10 +11,10 @@ hyperopt state, record results in state.)
 from copy import deepcopy
 from datetime import datetime
 
-from hyperopt import fmin, tpe, rand, Trials, trials_from_docs
+from hyperopt import fmin, rand, tpe, trials_from_docs, Trials, space_eval
 
-from locking import lock
-from search_state import *
+from slurm_search.locking import lock
+from slurm_search.search_state import *
 
 __all__ = [
     "create_search_session",
@@ -28,6 +28,7 @@ __all__ = [
     "search_session_exists",
     "search_session_names",
     "search_session_progress",
+    "search_session_results",
     "update_search_results",
 ]
 
@@ -211,6 +212,38 @@ def search_session_progress(session_name):
                 for trial in trials
                 if trial_active(trial)
             ),
+        }
+
+def unwrapped_settings(settings):
+    return {
+        key: (value
+              if not isinstance(value, list)
+                  and len(value) == 0
+              else value[0])
+        for key, value in settings.items()
+    }
+
+def search_session_results(session_name):
+    with lock(session_name):
+        state = search_state(session_name)
+
+        search_args = {
+            key: value
+            for key, value in state.items()
+            if key not in ("trials", "status", "start_time")
+        }
+
+        setting_results = [
+            (
+                unwrapped_settings(trial["misc"]["vals"]),
+                trial["result"],
+            )
+            for trial in state["trials"]
+        ]
+
+        return {
+            "search_args": search_args,
+            "setting_results": setting_results,
         }
 
 

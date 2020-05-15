@@ -3,8 +3,8 @@ from time import sleep
 
 from hyperopt import hp
 
-from random_phrase import random_phrase
-from search_session import (
+from slurm_search.random_phrase import random_phrase
+from slurm_search.search_session import (
     create_search_session,
     search_session_exists,
     next_search_trial,

@@ -154,6 +154,7 @@ def ale_search_session_args(*args):
 
         "agent_args": {
             "lr": 1 - hp.loguniform("one_minus_lr", -4, -1),
+            "entropy_loss_scaling": None,
         },
     }
 
@@ -166,8 +167,8 @@ def ale_search_session_args(*args):
 
     config = {
         "objective": ale_objective,
-        "algo": "tpe",
-        "max_evals": 12,
+        "algo": "rand",
+        "max_evals": 32,
         "space": [space_spec], # Wrapped because hyperopt is weird.
     }
 

@@ -9,14 +9,14 @@ from subprocess import Popen, run, TimeoutExpired
 from sys import argv, exit
 from time import sleep
 
-from locking import lock
-from objectives import (
+from slurm_search.locking import lock
+from slurm_search.objectives import (
     ale_objective,
     demo_objective,
     search_session_args,
 )
-from random_phrase import random_phrase
-from search_session import (
+from slurm_search.random_phrase import random_phrase
+from slurm_search.search_session import (
     create_search_session,
     delete_active_search_trials,
     disable_search_session,
@@ -24,10 +24,11 @@ from search_session import (
     search_session_names,
     search_session_objective,
     search_session_progress,
+    search_session_results,
     update_search_results,
     next_search_trial,
 )
-from search_state import search_state
+from slurm_search.search_state import search_state
 
 from hyperopt import hp, space_eval
 import numpy as np
@@ -147,6 +148,8 @@ def start_slurm_search(search_type, *args):
     print(f"[{session_name}] Launching workers...")
     launch_slurm_search_workers(session_name, iteration=1)
 
+    return session_name
+
 
 def restart_slurm_search(session_name):
     delete_active_search_trials(session_name)
@@ -179,32 +182,33 @@ def unwrapped_settings(settings):
         for key, value in settings.items()
     }
 
-def display_results_summary(session_name, space, trials):
-    results = [
-        (
-            unwrapped_settings(trial["misc"]["vals"]),
-            trial["result"]["loss"],
-        )
-        for trial in trials
-        if "loss" in trial["result"]
+def display_results_summary(session_name):
+    search_results = search_session_results(session_name)
+
+    space = search_results["search_args"]["space"]
+
+    setting_losses = [
+        (settings, results["loss"])
+        for settings, results in search_results["setting_results"]
+        if "loss" in results
     ]
-    if not results:
+    if not setting_losses:
         return
 
     losses = np.array([
         loss
-        for setting, loss in results
+        for setting, loss in setting_losses
     ])
     print(f"[{session_name}] Loss dist: {min(losses):.4} <= {losses.mean():.4} " +
           f"+/- {losses.std():.4} <= {max(losses):.4}")
 
 
-    best_setting, best_loss = min(results, key=lambda trial: trial[1])
+    best_setting, best_loss = min(setting_losses, key=lambda trial: trial[1])
     print(f"[{session_name}] Best setting: {best_setting} => " +
           f"Loss={best_loss:.4}. Spec:")
     pprint(space_eval(space, best_setting))
 
-    worst_setting, worst_loss = max(results, key=lambda trial: trial[1])
+    worst_setting, worst_loss = max(setting_losses, key=lambda trial: trial[1])
     print(f"[{session_name}] Worst setting: {worst_setting} => " +
           f"Loss={worst_loss:.4}. Spec:")
     pprint(space_eval(space, worst_setting))
@@ -213,12 +217,10 @@ def display_slurm_search_state(session_name):
     with lock(session_name):
         state = search_state(session_name)
         pprint(state)
-        if len(state.get("trials", [])) > 0:
-            display_results_summary(
-                session_name,
-                state["space"],
-                state["trials"],
-            )
+    if len(state.get("trials", [])) > 0:
+        display_results_summary(
+            session_name,
+        )
 
 def inspect_slurm_search_state(session_name):
     with lock(session_name):

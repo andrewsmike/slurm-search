@@ -10,7 +10,7 @@ from pickle import load, dump
 from os import makedirs, remove
 from os.path import expanduser, exists
 
-from locking import lock, needs_lock
+from slurm_search.locking import lock, needs_lock
 
 __all__ = [
     "create_search_state",
