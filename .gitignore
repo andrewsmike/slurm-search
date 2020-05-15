@@ -3,3 +3,5 @@ sessions/
 experiments/
 runs/
 *~
+*.egg-info/
+*.pyc

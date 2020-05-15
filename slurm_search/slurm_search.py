@@ -337,7 +337,9 @@ def generational_work_on_slurm_search(
 
     launch_next_generation(session_name, iteration + 1)
 
-def main(args):
+def main():
+    args = argv[1:]
+
     # TODO: Do proper logging.
     logging.disable(logging.CRITICAL)
 
@@ -370,4 +372,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    exit(main(argv[1:]))
+    exit(main())
