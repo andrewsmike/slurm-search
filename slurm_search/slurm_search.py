@@ -111,6 +111,7 @@ def launch_slurm_search_workers(session_name, iteration):
         "array": f"0-{dev_thread_count - 1}",
         "ntasks": 1,
         "mem-per-cpu": 10,
+        "exclude": "node121",
     }
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
@@ -309,7 +310,7 @@ def generational_work_on_slurm_search(
     search_complete = True
     try:
         run(
-            ["python3", argv[0], "work_on", session_name],
+            ["ssearch", "work_on", session_name],
             timeout=timeout,
         )
     except TimeoutExpired as e:

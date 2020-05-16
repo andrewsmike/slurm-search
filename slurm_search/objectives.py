@@ -6,6 +6,7 @@ decoding function that generates the appropriate search session config.
 ALL OBJECTIVES MUST BE IMPORTED INTO THE MAIN MODULE FOR PICKLE LOADING.
 """
 from csv import reader
+from math import log
 from os.path import join
 from time import sleep
 
@@ -147,14 +148,14 @@ def unflattened_dict(flattened_dict, delim=":"):
 # slurm_search.py start ale type=classic agent=a2c env=CartPole-v0
 def ale_search_session_args(*args):
     space_spec = {
-        "frames": 100 * (1000),
-        "episodes": 1000,
+        "frames": 2000000,
+        "episodes": 1000000,
         "test_episodes": 100,
-        "runs_per_setting": 32,
+        "runs_per_setting": 1,
 
         "agent_args": {
-            "lr": 1 - hp.loguniform("one_minus_lr", -4, -1),
-            "entropy_loss_scaling": None,
+            "lr": hp.loguniform("lr", log(0.0001), log(0.01)),
+            "entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
         },
     }
 
@@ -168,8 +169,8 @@ def ale_search_session_args(*args):
     config = {
         "objective": ale_objective,
         "algo": "rand",
-        "max_evals": 32,
         "space": [space_spec], # Wrapped because hyperopt is weird.
+        "max_evals": 32,
     }
 
     config.update(search_args)
