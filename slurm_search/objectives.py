@@ -8,6 +8,7 @@ ALL OBJECTIVES MUST BE IMPORTED INTO THE MAIN MODULE FOR PICKLE LOADING.
 from csv import reader
 from math import log
 from os.path import join
+from pprint import pprint
 from time import sleep
 
 from hyperopt import hp
@@ -90,17 +91,21 @@ def ale_objective(spec):
 
         experiment.train(
             frames=spec["frames"],
-            episodes=spec["episodes"],
+            episodes=spec.get("episodes", 0) or np.inf,
         )
-        returns.extend(experiment.test(
+        returns.append(experiment.test(
             episodes=spec["test_episodes"],
-        ))
+        )[:spec["test_episodes"]])
+        # BUG: Sometimes parallel env returns more than this number.
         del experiment
 
     returns = np.array(returns)
     print(f"Returns: {returns.mean()} +/- {returns.std()}")
 
+    run_axis, return_axis = 0, 1
     return {
+        "run_return_means": returns.mean(axis=return_axis),
+        "run_return_vars": returns.std(axis=return_axis),
         "returns_mean": returns.mean(),
         "returns_std": returns.std(),
         "loss": - returns.mean(),
@@ -148,10 +153,10 @@ def unflattened_dict(flattened_dict, delim=":"):
 # slurm_search.py start ale type=classic agent=a2c env=CartPole-v0
 def ale_search_session_args(*args):
     space_spec = {
-        "frames": 2000000,
-        "episodes": 1000000,
+        "frames": 200000,
+        #"episodes": 1000000, # Default of np.inf is best.
         "test_episodes": 100,
-        "runs_per_setting": 1,
+        "runs_per_setting": 16,
 
         "agent_args": {
             "lr": hp.loguniform("lr", log(0.0001), log(0.01)),

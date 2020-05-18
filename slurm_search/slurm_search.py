@@ -116,7 +116,7 @@ def launch_slurm_search_workers(session_name, iteration):
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
     if not dev_environment:
-        thread_count = 4 # Temporary.
+        thread_count = 8
         slurm_args.update({
             #"mem-per-cpu": 300,
             #"time": "05:00",
