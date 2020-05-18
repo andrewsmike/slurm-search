@@ -167,8 +167,10 @@ def stop_slurm_searches(*session_names):
 def display_slurm_searches(show_inactive=False):
     print("Active sessions (may not have workers):")
     rows =[
-        search_session_progress(session_name)
-        for session_name in search_session_names(including_inactive=bool(show_inactive))
+        search_session_progress(session_name, hide_type=True)
+        for session_name in search_session_names(
+                including_inactive=bool(show_inactive),
+        )
     ]
     display_table(
         columns=["session_name", "status", "running", "completed", "max_trials"],
@@ -237,7 +239,8 @@ def inspect_slurm_search_state(session_name):
     )
 
 def display_search_session_logs(session_name):
-    logs_dir = expanduser(f"~/hyperparameters/sessions/{session_name}/logs")
+    session_name = session_name.split(":")[1]
+    logs_dir = expanduser(f"~/hyperparameters/search/{session_name}/logs")
     log_files = glob(join(logs_dir, "*"))
     run(["tail", "-n", "+1"] + log_files)
 

@@ -194,12 +194,18 @@ def search_session_active(session_name):
         state = session_state(session_name)
         return state["status"] == "active"
 
-def search_session_progress(session_name):
+def search_session_progress(session_name, hide_type=False):
     with lock(session_name):
         state = session_state(session_name)
         trials = state["trials"]
+
+        abbrev_session_name = session_name.split(":")[1]
         return {
-            "session_name": session_name,
+            "session_name": (
+                abbrev_session_name
+                if hide_type else
+                session_name
+            ),
             "status": state["status"],
             "max_trials": state["max_evals"],
             "completed": sum(
@@ -252,6 +258,7 @@ def search_session_names(including_inactive=False):
         session_name
         for session_name in session_state_names()
         if including_inactive or search_session_active(session_name)
+        if session_name.startswith("search:")
     ]
 
 def create_search_session(session_name, start_time=None, **args):
