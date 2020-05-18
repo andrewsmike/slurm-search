@@ -18,7 +18,7 @@ __all__ = [
 ]
 
 def lock_file_path(lock_name):
-    return expanduser(f"~/hyperparameters/sessions/{lock_name}.lock")
+    return expanduser(f"~/hyperparameters/locks/{lock_name}.lock")
 
 _file_lock_paths = set()
 def have_lock(lock_name):

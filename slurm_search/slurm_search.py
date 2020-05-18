@@ -28,7 +28,7 @@ from slurm_search.search_session import (
     update_search_results,
     next_search_trial,
 )
-from slurm_search.search_state import search_state
+from slurm_search.session_state import session_state
 
 from hyperopt import hp, space_eval
 import numpy as np
@@ -62,7 +62,7 @@ def launch_parallel_search_workers(session_name):
     Launch multiple worker processes on the current host.
     Wait for them to terminate.
     """
-    worker_command = ["python3", "slurm_search.py", "work_on", session_name]
+    worker_command = ["ssearch.py", "work_on", session_name]
     PARALLELISM = 8
     workers = [
         Popen(worker_command)
@@ -97,7 +97,8 @@ def launch_slurm_script(script_path):
     run(['sbatch', script_path])
 
 def launch_slurm_search_workers(session_name, iteration):
-    SESSION_DIR = expanduser(f"~/hyperparameters/sessions/{session_name}/")
+    session_name = session_name.split(":")[1]
+    SESSION_DIR = expanduser(f"~/hyperparameters/search/{session_name}/")
 
     OUTPUT_DIR = join(SESSION_DIR, "logs")
     makedirs(OUTPUT_DIR, exist_ok=True)
@@ -136,7 +137,7 @@ def launch_slurm_search_workers(session_name, iteration):
     launch_slurm_script(script_path)
 
 def start_slurm_search(search_type, *args):
-    session_name = random_phrase()
+    session_name = "search:" + random_phrase()
     print(f"[{session_name}] Creating a new {search_type} search session.")
 
     search_args = search_session_args(search_type, *args)
@@ -216,7 +217,7 @@ def display_results_summary(session_name):
 
 def display_slurm_search_state(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
         pprint(state)
     if len(state.get("trials", [])) > 0:
         display_results_summary(
@@ -225,7 +226,7 @@ def display_slurm_search_state(session_name):
 
 def inspect_slurm_search_state(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
 
     interact(
         local={"state": state, "pprint": pprint},
@@ -356,6 +357,8 @@ def main():
         "generational_work_on": generational_work_on_slurm_search,
     }
 
+    no_session_commands = {"list", "start"}
+
     if not args:
         print(f"Commands: {', '.join(command_funcs.keys())}")
         return -1
@@ -369,8 +372,14 @@ def main():
         print("Commands: " + ", ".join(command_funcs.keys()))
         return -1
 
-    return command_func(*args[1:])
+    if command not in no_session_commands:
+        session_name = args[1]
+        if not session_name.startswith("search:"):
+            session_name = "search:" + args[1]
 
+        return command_func(session_name, *args[2:])
+    else:
+        return command_func(*args[1:])
 
 if __name__ == "__main__":
     exit(main())

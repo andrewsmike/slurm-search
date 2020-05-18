@@ -14,7 +14,7 @@ from datetime import datetime
 from hyperopt import fmin, rand, tpe, trials_from_docs, Trials, space_eval
 
 from slurm_search.locking import lock
-from slurm_search.search_state import *
+from slurm_search.session_state import *
 
 __all__ = [
     "create_search_session",
@@ -129,7 +129,7 @@ def state_without_active_trials(search_state):
 # Search / trial interactions.
 def search_session_objective(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
         return state["objective"]
 
 def next_search_trial(session_name, worker_id):
@@ -137,7 +137,7 @@ def next_search_trial(session_name, worker_id):
     Atomically decide the next hparam values and progress the session state.
     """
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
 
         if trials_exhausted(state):
             print("No more trials to run.")
@@ -147,7 +147,7 @@ def next_search_trial(session_name, worker_id):
 
         (trial_id, trial_hparams), next_state = state_next_trial(state, worker_id)
 
-        update_search_state(session_name, next_state)
+        update_session_state(session_name, next_state)
 
     return trial_id, trial_hparams
 
@@ -156,7 +156,7 @@ def update_search_results(session_name, trial_id, worker_id, hparams, results):
     Atomically record results into session's state.
     """
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
 
         state = state_updated_with_results(
             state,
@@ -169,20 +169,20 @@ def update_search_results(session_name, trial_id, worker_id, hparams, results):
         if trials_exhausted(state) and all_trials_complete(state):
             state["status"] = "complete"
 
-        update_search_state(session_name, state)
+        update_session_state(session_name, state)
 
 def delete_active_search_trials(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
 
         scrubbed_minimized_state = state_without_active_trials(state)
 
-        update_search_state(session_name, scrubbed_minimized_state)
+        update_session_state(session_name, scrubbed_minimized_state)
 
 # Session management.
 def search_session_exists(session_name):
     with lock(session_name):
-        return search_state_exists(session_name)
+        return session_state_exists(session_name)
 
 def search_session_active(session_name):
     """
@@ -191,12 +191,12 @@ def search_session_active(session_name):
     Its workers may have been killed anomalously.
     """
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
         return state["status"] == "active"
 
 def search_session_progress(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
         trials = state["trials"]
         return {
             "session_name": session_name,
@@ -225,7 +225,7 @@ def unwrapped_settings(settings):
 
 def search_session_results(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
 
         search_args = {
             key: value
@@ -250,13 +250,13 @@ def search_session_results(session_name):
 def search_session_names(including_inactive=False):
     return [
         session_name
-        for session_name in search_state_session_names()
+        for session_name in session_state_names()
         if including_inactive or search_session_active(session_name)
     ]
 
 def create_search_session(session_name, start_time=None, **args):
     with lock(session_name):
-        create_search_state(
+        create_session_state(
             session_name,
             dict(**args, **{
                 "trials": [],
@@ -267,18 +267,18 @@ def create_search_session(session_name, start_time=None, **args):
 
 def disable_search_session(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
         state["status"] = "disabled"
-        update_search_state(session_name, state)
+        update_session_state(session_name, state)
 
 def enable_search_session(session_name):
     with lock(session_name):
-        state = search_state(session_name)
+        state = session_state(session_name)
         state["status"] = "active"
-        update_search_state(session_name, state)
+        update_session_state(session_name, state)
 
 def delete_search_session(session_name):
     raise ValueError("Why are you programmatically deleting files? Stop that.")
     with lock(session_name):
-        delete_search_state(session_name)
+        delete_session_state(session_name)
 
