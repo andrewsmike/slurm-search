@@ -18,6 +18,8 @@ from all.environments import AtariEnvironment, GymEnvironment
 from all.experiments import SingleEnvExperiment, ParallelEnvExperiment
 from all.presets import atari, classic_control, continuous
 
+from slurm_search.params import unflattened_params
+
 __all__ = [
     "ale_objective",
     "demo_objective",
@@ -132,22 +134,6 @@ def config_from_args(args):
         for key, value in (arg.strip().split("="), )
     }
 
-def unflattened_dict(flattened_dict, delim=":"):
-    result = {}
-    for path, value in flattened_dict.items():
-        path_parts = path.split(delim)
-        key, rest = path_parts[0], path_parts[1:]
-        result.setdefault(key, {})[delim.join(rest)] = value
-
-    return {
-        key: (
-            unflattened_dict(value)
-            if "" not in value else
-            value[""]
-        )
-        for key, value in result.items()
-    }
-
 
 # Example:
 # slurm_search.py start ale type=classic agent=a2c env=CartPole-v0
@@ -165,7 +151,7 @@ def ale_search_session_args(*args):
     }
 
     space_spec.update(
-        unflattened_dict(config_from_args(args), delim=":")
+        unflattened_params(config_from_args(args), delim=":")
     )
 
     search_args = space_spec.get("search", {})

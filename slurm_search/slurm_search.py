@@ -2,7 +2,7 @@
 from code import interact
 from glob import glob
 import logging
-from os import getenv, makedirs
+from os import getenv, getpid, makedirs
 from os.path import expanduser, join
 from pprint import pprint
 from subprocess import Popen, run, TimeoutExpired
@@ -286,7 +286,7 @@ def slurm_array_task_index():
 
 def slurm_worker_id():
     job_id = getenv("SLURM_JOB_ID", "UNKNOWN")
-    return f"{job_id}_{slurm_array_task_index() or 0}"
+    return f"{job_id}_{slurm_array_task_index() or 0}_{getpid()}"
 
 def launch_next_generation(session_name, iteration):
     print("Waiting for other workers to quit...")
