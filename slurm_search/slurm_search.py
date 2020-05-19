@@ -62,7 +62,7 @@ def launch_parallel_search_workers(session_name):
     Launch multiple worker processes on the current host.
     Wait for them to terminate.
     """
-    worker_command = ["ssearch.py", "work_on", session_name]
+    worker_command = ["ssearch", "work_on", session_name]
     PARALLELISM = 8
     workers = [
         Popen(worker_command)
@@ -96,14 +96,14 @@ def write_slurm_script(path, slurm_args, command):
 def launch_slurm_script(script_path):
     run(['sbatch', script_path])
 
-def launch_slurm_search_workers(session_name, iteration):
+def launch_slurm_search_workers(session_name, iteration, thread_count=None):
     session_name = session_name.split(":")[1]
     SESSION_DIR = expanduser(f"~/hyperparameters/search/{session_name}/")
 
     OUTPUT_DIR = join(SESSION_DIR, "logs")
     makedirs(OUTPUT_DIR, exist_ok=True)
 
-    dev_thread_count = 4
+    dev_thread_count = thread_count or 4
 
     slurm_args = {
         "job-name": slurm_job_name(session_name, iteration),
@@ -117,7 +117,7 @@ def launch_slurm_search_workers(session_name, iteration):
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
     if not dev_environment:
-        thread_count = 8
+        thread_count = thread_count or 8
         slurm_args.update({
             #"mem-per-cpu": 300,
             #"time": "05:00",
