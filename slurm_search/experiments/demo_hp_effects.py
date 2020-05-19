@@ -22,8 +22,8 @@ def demo_hp_effects():
             method="inline",
         )["mean"],
         sample_count="search:setting_samples",
-        method="slurm",
-        threads=8,
+        method="search:method",
+        threads="search:threads",
     )
 
     best_hp = typical_hp_samples["argmax"]
@@ -35,8 +35,8 @@ def demo_hp_effects():
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
             sample_count="eval:run_samples",
-            method="slurm",
-            threads=8,
+            method="eval:method",
+            threads="eval:threads",
         )
     ]
 
@@ -45,7 +45,8 @@ def demo_hp_effects():
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
             sample_count="eval:run_samples",
-            method="slurm",
+            method="eval:method",
+            threads="eval:threads",
         )
     ]
 
@@ -74,7 +75,7 @@ default_demo_hp_effects_config = {
 
     "hp_space": default_hp_space,
 
-    "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31),
+    "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
 
     "run": {
         "train_frames": 100000,
@@ -84,9 +85,15 @@ default_demo_hp_effects_config = {
     "search": {
         "setting_samples": 96,
         "run_samples_per_setting": 12,
+
+        "method": "inline",
+        "threads": 12,
     },
     "eval": {
         "run_samples": 24,
+
+        "method": "inline",
+        "threads": 12,
     },
 }
 
@@ -108,7 +115,7 @@ def main():
         defaults=default_demo_hp_effects_config,
         overrides={
             "agent": "continuous:a2c",
-            "env":  "continuous:CartPole-v1",
+            "env": "continuous:CartPole-v1",
         },
     )
 

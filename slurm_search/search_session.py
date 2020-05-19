@@ -58,7 +58,7 @@ def state_next_trial(state, worker_id):
             max_evals=len(prev_trials) + 1,
             show_progressbar=False,
         )
-    except Exception as e:
+    except ValueError as e:
         pass
 
     new_trial[0]["worker_id"] = worker_id

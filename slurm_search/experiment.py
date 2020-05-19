@@ -22,6 +22,7 @@ from slurm_search.search_session import (
     create_search_session,
     next_search_trial,
     search_session_names,
+    search_session_progress,
     search_session_results,
     update_search_results,
 )
@@ -72,7 +73,13 @@ _current_experiment = None
 _current_params = None
 
 def param(name):
-    return deepcopy(_current_params.get(name, None))
+    params = _current_params
+    while ":" in name:
+        parts = name.split(":")
+        head, name = parts[0], ":".join(parts[1:])
+        params = params.get(parts[0], {})
+
+    return deepcopy(params.get(name, None))
 
 def params():
     return deepcopy(_current_params)
@@ -168,7 +175,7 @@ class CallNode(Node):
         params = dict(self.params)
         params.update({
             param_name: param(param_value)
-            for param_name, param_value in params
+            for param_name, param_value in params.items()
             if isinstance(param_value, str)
             if param(param_value) is not None
         })
@@ -208,13 +215,13 @@ class UseNode(Node):
         if isinstance(value, Node):
             value = value()
 
-        params = updated_params(
+        new_params = updated_params(
             params(),
             unflattened_params({ # Param may be a path.
                 param: value,
             }),
         )
-        with temporary_params(params):
+        with temporary_params(new_params):
             return self.expr()
 
     def __str__(self):
@@ -235,7 +242,7 @@ class SamplingResultsNode(Node):
         self.attr_names = attr_names
 
     def __call__(self):
-        return self.expr(self.attr_names)
+        return self.expr(*self.attr_names)
 
     def __str__(self):
         name = "_".join(self.attr_names)
@@ -249,6 +256,7 @@ def random_sampling_objective(spec):
         results = func()
 
     return {
+        "result": results,
         "loss": results,
         "status": "ok",
     }
@@ -290,6 +298,7 @@ class RandomSamplingNode(Node):
 
         self.sampling_var = sampling_var
         self.sampling_space = sampling_space
+        self.hidden_params = set()
 
         self.func = func
 
@@ -321,6 +330,7 @@ class RandomSamplingNode(Node):
 
     def bind_params(self):
         if isinstance(self.sampling_space, str):
+            self.hidden_params.add(self.sampling_space)
             self.sampling_space = param(self.sampling_space)
 
         if isinstance(self.sample_count, str):
@@ -337,14 +347,19 @@ class RandomSamplingNode(Node):
         while session_name in existing_session_names:
             session_name = "search:" + random_phrase()
 
+        params = updated_params(
+            self.params,
+            # Unflatten as sampling var may be a path.
+            unflattened_params({
+                self.sampling_var: self.sampling_space,
+            }),
+        )
+        for param in self.hidden_params:
+            del params[param]
+
         search_space_spec = {
             "func": self.func,
-            "params": updated_params(
-                self.params,
-                unflattened_params({ # sampling_var may be a path.
-                    self.sampling_var: self.sampling_space,
-                }),
-            ),
+            "params": params,
         }
 
         create_search_session(
@@ -368,7 +383,7 @@ class RandomSamplingNode(Node):
         try:
             while True:
                 self.sample_once(worker_id="cpu0")
-        except ValueError:
+        except ValueError as e:
             pass
 
     def sample_once(self, worker_id):
@@ -453,11 +468,11 @@ class RandomSamplingNode(Node):
         )
 
         return {
-            "mean": results.mean(),
-            "std": results.std(),
-            "min": results.min(),
-            "max": results.max(),
-            "cdf": np.sort(results),
+            "mean": result_dist.mean(),
+            "std": result_dist.std(),
+            "min": result_dist.min(),
+            "max": result_dist.max(),
+            "cdf": np.sort(result_dist),
             "argmin": sorted_setting_results[0][0],
             "argmax": sorted_setting_results[-1][0],
         }
@@ -466,9 +481,10 @@ class RandomSamplingNode(Node):
         if not self.collected:
             self.wait()
 
-            assert search_session_progress(
+            status = search_session_progress(
                 self.session_name
-            )["status"] == "completed"
+            )["status"]
+            assert status == "complete", status
 
             self.setting_results = (
                 search_session_results(self.session_name)["setting_results"]

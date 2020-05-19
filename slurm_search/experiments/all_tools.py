@@ -8,6 +8,9 @@ from slurm_search.experiment import accepts_param_names
 ## ALL target function
 def run_results(env, agent, hp, run_params, run_seed):
 
+    # Shortcut everything for fast debugging.
+    return {"return_mean": run_seed}
+
     train_frames = run_params["train_frames"]
     train_episodes = run_params["train_episodes"]
     test_episodes = run_params["test_episodes"]

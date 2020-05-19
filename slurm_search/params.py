@@ -1,3 +1,5 @@
+from hyperopt.pyll.base import Apply as hp_apply
+
 __all__ = [
     "unflattened_params",
     "updated_params",
@@ -27,3 +29,4 @@ def updated_params(base, additions):
         params[key] = value
 
     return params
+
