@@ -377,12 +377,10 @@ def main():
 
     if command not in no_session_commands:
         session_name = args[1]
-        if not session_name.startswith("search:"):
+        if not ":" in session_name:
             session_name = "search:" + args[1]
 
         return command_func(session_name, *args[2:])
     else:
         return command_func(*args[1:])
 
-if __name__ == "__main__":
-    exit(main())

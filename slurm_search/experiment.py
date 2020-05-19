@@ -179,6 +179,12 @@ class CallNode(Node):
             if isinstance(param_value, str)
             if param(param_value) is not None
         })
+        params.update({
+            param_name: param(param_value[:-len("_params")])
+            for param_name, param_value in params.items()
+            if isinstance(param_value, str)
+            if param(param_value[:-len("_params")]) is not None
+        })
 
         return self.wrapper._func(**params)
 

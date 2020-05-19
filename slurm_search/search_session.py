@@ -257,8 +257,8 @@ def search_session_names(including_inactive=False):
     return [
         session_name
         for session_name in session_state_names()
-        if including_inactive or search_session_active(session_name)
         if session_name.startswith("search:")
+        if including_inactive or search_session_active(session_name)
     ]
 
 def create_search_session(session_name, start_time=None, **args):
