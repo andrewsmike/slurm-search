@@ -260,9 +260,15 @@ def random_sampling_objective(spec):
     with temporary_params(params):
         results = func()
 
+    # So you can return interesting data.
+    if isinstance(results, (int, float)):
+        loss = results
+    else:
+        loss = 0
+
     return {
         "result": results,
-        "loss": results,
+        "loss": loss,
         "status": "ok",
     }
 
@@ -466,13 +472,21 @@ class RandomSamplingNode(Node):
 
     def results(self):
         self.collect_results()
-        result_dist = np.array([
+
+        results = [
             results["result"]
             for setting, results in self.setting_results
-        ])
-        sorted_setting_results = sorted(
-            self.setting_results,
-            key=lambda setting_result: setting_result[1]["result"],
+        ]
+        if isinstance(results[0], (int, float)):
+            result_dist = np.array(results)
+        else:
+            result_dist = np.zeros(len(results))
+
+        sorted_setting_results = sorted([
+            setting, results["result"]
+            for setting, results in self.setting_results
+        ],
+            key=lambda setting_results: setting_results[1],
         )
 
         return {
@@ -483,6 +497,7 @@ class RandomSamplingNode(Node):
             "cdf": np.sort(result_dist),
             "argmin": sorted_setting_results[0][0],
             "argmax": sorted_setting_results[-1][0],
+            "point_values": sorted_setting_results,
         }
 
     def collect_results(self):
