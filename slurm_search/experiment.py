@@ -456,38 +456,66 @@ class RandomSamplingNode(Node):
             sleep(1 * MINUTE)
 
     def __call__(self, *attrs):
-        self.launch()
-        results = self.results()
-
         if not attrs:
-            return results
-        elif len(attrs) == 1:
-            attr, = attrs
-            return results[attr]
-        else:
-            return [
-                results[attr]
-                for attr in attrs
-            ]
+            attrs = ["all"]
 
-    def results(self):
+        attr_result_dims = [
+            (parts[0], ":".join(parts[1:]))
+             for attr in attrs
+             for parts in (attr.split(":"),)
+        ]
+
+        result_dims = {
+            result_dims
+            for attr, result_dims in attr_result_dims
+        }
+
+        self.launch()
+
+        result_dim_results = {
+            result_dim: self.results(result_dim)
+            for result_dim in result_dims
+        }
+
+        result_parts = [
+            (result_dim_results[result_dim][attr]
+             if attr != "all" else
+             result_dim_results[result_dim])
+            for attr, result_dim in attr_result_dims
+        ]
+        if len(attrs) == 1:
+            return result_parts[0]
+        else:
+            return result_parts
+
+    def results(self, result_dim=None):
         self.collect_results()
 
-        results = [
-            results["result"]
+        setting_results = [
+            (
+                setting,
+                (results["result"]
+                 if not result_dim else
+                 results["result"][result_dim])
+            )
             for setting, results in self.setting_results
         ]
+        results = [
+            results
+            for setting, results in setting_results
+        ]
+
         if isinstance(results[0], (int, float)):
             result_dist = np.array(results)
+
+            sorted_setting_results = sorted(
+                setting_results,
+                key=lambda setting_result: setting_result[1],
+            )
         else:
             result_dist = np.zeros(len(results))
 
-        sorted_setting_results = sorted([
-            setting, results["result"]
-            for setting, results in self.setting_results
-        ],
-            key=lambda setting_results: setting_results[1],
-        )
+            sorted_setting_results = setting_results
 
         return {
             "mean": result_dist.mean(),
@@ -498,6 +526,7 @@ class RandomSamplingNode(Node):
             "argmin": sorted_setting_results[0][0],
             "argmax": sorted_setting_results[-1][0],
             "point_values": sorted_setting_results,
+            "session_name": self.session_name,
         }
 
     def collect_results(self):

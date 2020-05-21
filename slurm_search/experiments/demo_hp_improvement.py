@@ -12,56 +12,74 @@ from slurm_search.experiment import (
     use,
 )
 from slurm_search.experiments.all_tools import return_mean
+from slurm_search.experiments.display_tools import (
+    display_setting_surface,
+    display_setting_cdf_surface,
+)
 
 def demo_hp_effects():
-    typical_hp_samples = random_sampling(
+    space_samples = random_sampling(
         "hp",
         random_sampling(
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
             sample_count="search:run_samples_per_setting",
             method="inline",
-        )["mean"],
+        ),
         sample_count="search:setting_samples",
         method="slurm",
-        threads=8,
+        threads=12,
     )
 
-    best_hp = typical_hp_samples["argmax"]
-    worst_hp = typical_hp_samples["argmin"]
-    typical_hp_returns_mean_std = typical_hp_samples["mean", "std"]
+    best_hp = space_samples["argmax:mean"]
+    worst_hp = space_samples["argmin:mean"]
+    space_returns_mean_std = space_samples["mean:mean", "std:mean"]
 
-    best_hp_runs = use("hp", best_hp)[
+    best_hp_samples = use("hp", best_hp)[
         random_sampling(
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
             sample_count="eval:run_samples",
             method="slurm",
-            threads=8,
+            threads=12,
         )
     ]
 
-    worst_hp_runs = use("hp", worst_hp)[
+    worst_hp_samples = use("hp", worst_hp)[
         random_sampling(
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
             sample_count="eval:run_samples",
             method="slurm",
-            threads=8,
+            threads=12,
         )
     ]
 
-    best_hp_returns_mean_std = best_hp_runs["mean", "std"]
-    worst_hp_returns_mean_std = worst_hp_runs["mean", "std"]
+    best_hp_returns_mean_std = best_hp_samples["mean", "std"]
+    worst_hp_returns_mean_std = worst_hp_samples["mean", "std"]
+
+    best_hp_cdf = best_hp_samples["cdf"]
+    worst_hp_cdf = worst_hp_samples["cdf"]
+
+    space_hp_cdf = space_samples["point_values:cdf"]
+    space_hp_mean = space_samples["point_values:mean"]
+
 
     return {
-        "best_hparams": best_hp,
-        "best_returns_mean_std": best_hp_returns_mean_std,
+        "best_hp_samples": best_hp_samples,
+        "best_hp": best_hp,
+        "best_hp_returns_mean_std": best_hp_returns_mean_std,
+        "best_hp_cdf": best_hp_cdf,
 
-        "typical_returns_mean_std": typical_hp_returns_mean_std,
+        "space_hp_samples": space_samples,
+        "space_returns_mean_std": space_returns_mean_std,
+        "space_hp_cdf": space_hp_cdf,
+        "space_hp_mean": space_hp_mean,
 
-        "worst_hparams": worst_hp,
-        "worst_returns_mean_std": worst_hp_returns_mean_std,
+        "worst_hp_samples": worst_hp_samples,
+        "worst_hp": worst_hp,
+        "worst_hp_returns_mean_std": worst_hp_returns_mean_std,
+        "worst_hp_cdf": worst_hp_cdf,
     }
 
 
@@ -117,7 +135,16 @@ def demo_hp_improvement():
     print(session_name)
     pprint(results)
 
-    interact(local=locals())
+    display_setting_surface(
+        results["space_hp_mean"],
+        setting_dims=["els", "lr"],
+        zlabel="Mean return",
+        fig_name="setting_mean_return",
+    )
+    display_setting_cdf_surface(
+        results["space_hp_cdf"],
+        zlabel="Return",
+        fig_name="setting_percentile_return",
+    )
 
-if __name__ == "__main__":
-    main()
+    interact(local=locals())
