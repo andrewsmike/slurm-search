@@ -1,3 +1,5 @@
+import numpy as np
+
 from all.environments import AtariEnvironment, GymEnvironment
 from all.experiments import ParallelEnvExperiment
 from all.presets import atari, classic_control, continuous
@@ -49,7 +51,7 @@ def run_results(env, agent, hp, run_params, run_seed):
     )
     returns = experiment.test(
         episodes=test_episodes,
-    )[:spec["test_episodes"]] # ALL BUG: May return >test_episodes episodes.
+    )[:test_episodes] # ALL BUG: May return >test_episodes episodes.
     del experiment
 
     returns = np.array(returns)
@@ -57,7 +59,7 @@ def run_results(env, agent, hp, run_params, run_seed):
     return {
         "return_mean": returns.mean(),
         "return_var": returns.std(),
-        "returns_cdf": np.sorted(returns),
+        "returns_cdf": np.sort(returns),
     }
 
 @accepts_param_names

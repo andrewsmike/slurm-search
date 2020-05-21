@@ -24,7 +24,7 @@ def demo_hp_effects():
         )["mean"],
         sample_count="search:setting_samples",
         method="slurm",
-        threads="12",
+        threads=8,
     )
 
     best_hp = typical_hp_samples["argmax"]

@@ -99,7 +99,6 @@ def temporary_params(next_params):
 def accepts_param_names(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        wrapper._func = func
         return CallNode(
             wrapper,
             args,
@@ -159,13 +158,13 @@ class CallNode(Node):
         """
         Due to pickling issues, we have to proxy through a reference to the
         wrapping function. It is expected that the underlying function be
-        available under the "_func" attribute.
+        available under the "__wrapped__" attribute.
         """
         self.wrapper = wrapper
         self.args = args
         self.kwargs = kwargs
 
-        self.params = dict(signature(wrapper._func).bind(
+        self.params = dict(signature(wrapper.__wrapped__).bind(
             *args,
             **kwargs,
         ).arguments)
@@ -186,7 +185,7 @@ class CallNode(Node):
             if param(param_value[:-len("_params")]) is not None
         })
 
-        return self.wrapper._func(**params)
+        return self.wrapper.__wrapped__(**params)
 
     def __str__(self):
         args_str = ", ".join(
@@ -195,7 +194,7 @@ class CallNode(Node):
                 for key, val in self.kwargs.items()
             ]
         )
-        return f"{self.wrapper._func.__name__}({args_str})"
+        return f"{self.wrapper.__wrapped__.__name__}({args_str})"
 
 
 class UseNode(Node):
@@ -345,13 +344,16 @@ class RandomSamplingNode(Node):
         self.params = params()
 
     def register_session(self):
+        session_type = "slurm:" if self.method == "slurm" else "sampling:"
+
         existing_session_names = search_session_names(
-            including_inactive=True,
+            filter_inactive=False,
+            search_type=session_type,
         )
 
-        session_name = "search:" + random_phrase()
+        session_name =  session_type + random_phrase()
         while session_name in existing_session_names:
-            session_name = "search:" + random_phrase()
+            session_name = session_type + random_phrase()
 
         params = updated_params(
             self.params,
@@ -432,19 +434,19 @@ class RandomSamplingNode(Node):
     def wait_parallel(self):
         MINUTE = 60
         while True:
-            status = search_session_progress(session_name)["status"]
+            status = search_session_progress(self.session_name)["status"]
             assert status in ("active", "disabled", "complete"), (
-                f"Unknown search status {status} for search {session_name}."
+                f"Unknown search status {status} for search {self.session_name}."
             )
 
             if status == "disabled":
                 raise RuntimeError(
-                    f"Someone stopped search session {session_name}."
+                    f"Someone stopped search session {self.session_name}."
                 )
             elif status == "complete":
                 return
 
-            print(f"Search {session_name} is active. Waiting 1 minute.")
+            print(f"Search {self.session_name} is active. Waiting 1 minute.")
             sleep(1 * MINUTE)
 
     def __call__(self, *attrs):

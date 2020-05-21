@@ -137,7 +137,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
     launch_slurm_script(script_path)
 
 def start_slurm_search(search_type, *args):
-    session_name = "search:" + random_phrase()
+    session_name = "slurm:" + random_phrase()
     print(f"[{session_name}] Creating a new {search_type} search session.")
 
     search_args = search_session_args(search_type, *args)
@@ -164,16 +164,35 @@ def stop_slurm_searches(*session_names):
         print(f"[{session_name}] Disabled search. No more trials will start.")
     print("TODO: You may want to kill the remaining slurm workers. They could take a while to die off.")
 
-def display_slurm_searches(show_inactive=False):
+def stop_all_slurm_searches(session_type="slurm"):
+    for session_name in search_session_names(
+            search_type=session_type,
+            filter_inactive=True,
+    ):
+        disable_search_session(session_name)
+        print(f"[{session_name}] Disabled search. No more trials will start.")
+    print("TODO: You may want to kill the remaining slurm workers. They could take a while to die off.")
+
+def display_slurm_searches(search_type="slurm", show_inactive=False):
     print("Active sessions (may not have workers):")
     rows =[
-        search_session_progress(session_name, hide_type=True)
+        search_session_progress(
+            session_name,
+        )
         for session_name in search_session_names(
-                including_inactive=bool(show_inactive),
+                search_type=search_type,
+                filter_inactive=not show_inactive,
         )
     ]
     display_table(
-        columns=["session_name", "status", "running", "completed", "max_trials"],
+        columns=[
+            "session_name",
+            "session_type",
+            "status",
+            "running",
+            "completed",
+            "max_trials",
+        ],
         rows=rows,
     )
 
@@ -282,7 +301,7 @@ def slurm_iteration():
         return None
 
 def slurm_array_task_index():
-    return int(getenv("SLURM_ARRAY_TASK_ID")) or None
+    return int(getenv("SLURM_ARRAY_TASK_ID", 0)) or None
 
 def slurm_worker_id():
     job_id = getenv("SLURM_JOB_ID", "UNKNOWN")
@@ -353,6 +372,7 @@ def main():
         "start": start_slurm_search,
         "restart": restart_slurm_search,
         "stop": stop_slurm_searches,
+        "stopall": stop_all_slurm_searches,
         "show": display_slurm_search_state,
         "inspect_state": inspect_slurm_search_state,
         "logs": display_search_session_logs,
@@ -360,7 +380,8 @@ def main():
         "generational_work_on": generational_work_on_slurm_search,
     }
 
-    no_session_commands = {"list", "start"}
+    no_session_commands = {"list", "start", "stopall"}
+    multi_session_commands = {"stop"}
 
     if not args:
         print(f"Commands: {', '.join(command_funcs.keys())}")
@@ -375,10 +396,17 @@ def main():
         print("Commands: " + ", ".join(command_funcs.keys()))
         return -1
 
-    if command not in no_session_commands:
+    if command in multi_session_commands:
+        args = [
+            ("slurm:" + arg) if ":" not in arg else arg
+            for arg in args[1:]
+        ]
+        return command_func(*args)
+        
+    elif command not in no_session_commands:
         session_name = args[1]
         if not ":" in session_name:
-            session_name = "search:" + args[1]
+            session_name = "slurm:" + args[1]
 
         return command_func(session_name, *args[2:])
     else:
