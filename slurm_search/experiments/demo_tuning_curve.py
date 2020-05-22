@@ -23,23 +23,21 @@ from slurm_search.params import (
     updated_params,
 )
 
-def demo_hp_effects():
+def search_return_cdf(search_hp, search_seed):
     space_samples = random_sampling(
         "hp",
         random_sampling(
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
-            sample_count="search:run_samples_per_setting",
+            sample_count="search_hp:runs_per_setting",
             method="inline",
         ),
-        sample_count="search:setting_samples",
+        sample_count="search_hp:setting_samples",
         method="slurm",
         threads="search:threads",
     )
 
     best_hp = space_samples["argmax:mean"]
-    worst_hp = space_samples["argmin:mean"]
-    space_returns_mean_std = space_samples["mean:mean", "std:mean"]
 
     best_hp_samples = use("hp", best_hp)[
         random_sampling(
@@ -51,55 +49,42 @@ def demo_hp_effects():
         )
     ]
 
-    worst_hp_samples = use("hp", worst_hp)[
-        random_sampling(
-            "run_seed",
-            return_mean("env", "agent", "hp", "run_params", "run_seed"),
-            sample_count="eval:run_samples",
-            method="slurm",
-            threads="eval:threads",
-        )
-    ]
+    return best_hp_samples["cdf"]
 
-    best_hp_returns_mean_std = best_hp_samples["mean", "std"]
-    worst_hp_returns_mean_std = worst_hp_samples["mean", "std"]
 
-    best_hp_cdf = best_hp_samples["cdf"]
-    worst_hp_cdf = worst_hp_samples["cdf"]
+def demo_hp_effects():
+    search_samples = random_sampling(
+        ("search", "search_space"),
+        search_return_cdf(
+            "search_hp",
+            "search_seed",
+        ),
+        sample_count="meta:search_count",
+        method="inline",
+    )
 
-    space_hp_cdf = space_samples["point_values:cdf"]
-    space_hp_mean = space_samples["point_values:mean"]
-
+    search_hp_mean = search_samples["point_values:mean"]
+    search_hp_var = search_samples["point_values:var"]
 
     return {
-        "best_hp_samples": best_hp_samples,
-        "best_hp": best_hp,
-        "best_hp_returns_mean_std": best_hp_returns_mean_std,
-        "best_hp_cdf": best_hp_cdf,
-
-        "space_hp_samples": space_samples,
-        "space_returns_mean_std": space_returns_mean_std,
-        "space_hp_cdf": space_hp_cdf,
-        "space_hp_mean": space_hp_mean,
-
-        "worst_hp_samples": worst_hp_samples,
-        "worst_hp": worst_hp,
-        "worst_hp_returns_mean_std": worst_hp_returns_mean_std,
-        "worst_hp_cdf": worst_hp_cdf,
+        "search_samples": search_samples,
+        "search_hp_mean": search_hp_mean,
+        "search_hp_var": search_hp_var,
     }
 
-
-default_hp_space = {
-    "lr": hp.loguniform("lr", log(0.0001), log(0.01)),
-    "entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
-}
-
-default_demo_hp_effects_config = {
+default_demo_tuning_curve_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
 
-    "hp_space": default_hp_space,
-
+    "search_space": {
+        "lr": hp.loguniform("lr", log(0.0001), log(0.01)),
+        "entropy_loss_scaling": hp.uniform("entropy_loss_scaling", 0.0, 0.1),
+    },
+    "search_seed_space": hp.quniform("search_seed", 0, 2 ** 31, 1),
+    "hp_space": {
+        "runs_per_sample": hp.uniform("runs_per_sample", 8, 24),
+        "setting_samples": hp.uniform("setting_samples", 12, 96),
+    },
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
 
     "run": {
@@ -107,11 +92,11 @@ default_demo_hp_effects_config = {
         "train_episodes": np.inf,
         "test_episodes": 100,
     },
+
     "search": {
-        "setting_samples": 96,
-        "run_samples_per_setting": 12,
         "threads": 8,
     },
+
     "eval": {
         "run_samples": 24,
         "threads": 8,
@@ -133,16 +118,17 @@ def demo_hp_improvement():
     pprint(updated_params(default_demo_hp_effects_config, overrides))
 
     details = experiment_details(
-        demo_hp_effects,
-        defaults=default_demo_hp_effects_config,
+        demo_tuning_curve,
+        defaults=default_demo_tuning_curve_config,
         overrides=overrides,
     )
-    #for key, value in details.items():
-    #    print(f"{key}:")
-    #    print(value)
+    for key, value in details.items():
+        print(f"{key}:")
+        print(value)
 
+    return 0
     session_name, results = run_experiment(
-        demo_hp_effects,
+        demo_tuning_curve,
         defaults=default_demo_hp_effects_config,
         overrides=overrides,
     )
@@ -152,7 +138,7 @@ def demo_hp_improvement():
 
     display_setting_surface(
         results["space_hp_mean"],
-        setting_dims=["els", "lr"],
+        setting_dims=["entropy_loss_scaling", "lr"],
         zlabel="Mean return",
         fig_name="setting_mean_return",
     )

@@ -18,7 +18,7 @@ from all.environments import AtariEnvironment, GymEnvironment
 from all.experiments import SingleEnvExperiment, ParallelEnvExperiment
 from all.presets import atari, classic_control, continuous
 
-from slurm_search.params import unflattened_params
+from slurm_search.params import unflattened_params, params_from_args
 
 __all__ = [
     "ale_objective",
@@ -114,26 +114,6 @@ def ale_objective(spec):
         "status": "ok",
     }
 
-def parsed_value(value):
-    try:
-        return int(value)
-    except:
-        pass
-
-    try:
-        return float(value)
-    except:
-        pass
-
-    return value
-
-def config_from_args(args):
-    return {
-        key.lstrip("-"): parsed_value(value)
-        for arg in args
-        for key, value in (arg.strip().split("="), )
-    }
-
 
 # Example:
 # slurm_search.py start ale type=classic agent=a2c env=CartPole-v0
@@ -151,7 +131,7 @@ def ale_search_session_args(*args):
     }
 
     space_spec.update(
-        unflattened_params(config_from_args(args), delim=":")
+        unflattened_params(params_from_args(args), delim=":")
     )
 
     search_args = space_spec.get("search", {})

@@ -2,6 +2,7 @@ from hyperopt.pyll.base import Apply as hp_apply
 
 __all__ = [
     "flattened_params",
+    "params_from_args",
     "unflattened_params",
     "updated_params",
 ]
@@ -33,6 +34,27 @@ def unflattened_params(flattened_params, delim=":"):
             value[""]
         )
         for key, value in result.items()
+    }
+
+
+def parsed_value(value):
+    try:
+        return int(value)
+    except:
+        pass
+
+    try:
+        return float(value)
+    except:
+        pass
+
+    return value
+
+def params_from_args(args):
+    return {
+        key.lstrip("-"): parsed_value(value)
+        for arg in args
+        for key, value in (arg.strip().split("="), )
     }
 
 def updated_params(base, additions):

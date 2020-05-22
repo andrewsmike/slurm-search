@@ -315,7 +315,6 @@ class RandomSamplingNode(Node):
 
         self.sample_count = sample_count
 
-        assert method in ("inline", "cpu", "slurm")
         self.method = method
         self.thread_count = threads
 
@@ -346,6 +345,12 @@ class RandomSamplingNode(Node):
 
         if isinstance(self.sample_count, str):
             self.sample_count = param(self.sample_count)
+
+        if self.method not in ("inline", "cpu", "slurm"):
+            self.method = param(self.method)
+
+        if isinstance(self.thread_count, str):
+            self.thread_count = param(self.thread_count)
 
         self.params = params()
 

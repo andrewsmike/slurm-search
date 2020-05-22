@@ -16,6 +16,7 @@ setup(
         "console_scripts": [
             "ssearch=slurm_search:main",
             "exp_hp_imp=slurm_search.experiments:demo_hp_improvement",
+            "exp_tuning_curve=slurm_search.experiments:demo_tuning_curve",
         ],
     }
 )
