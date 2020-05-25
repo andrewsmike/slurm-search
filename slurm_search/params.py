@@ -1,14 +1,42 @@
+from pprint import pformat
+
 from hyperopt.pyll.base import Apply as hp_apply
 
 __all__ = [
+    "mapped_params",
     "flattened_params",
     "params_from_args",
     "unflattened_params",
     "updated_params",
+    "params_str",
+    "params_equal",
 ]
+
+def mapped_params(mapper_func, data, prefix=None):
+    prefix = []
+    if isinstance(data, dict):
+        return {
+            key: mapped_params(mapper_func, value, prefix + [key])
+            for key, value in sorted(data.items())
+        }
+    elif isinstance(data, list):
+        return [
+            mapped_params(mapper_func, value, prefix + [index])
+            for index, value in enumerate(data)
+        ]
+    elif isinstance(data, tuple):
+        return tuple(
+            mapped_params(mapper_func, value, prefix + [index])
+            for index, value in enumerate(data)
+        )
+    else:
+        return mapper_func(data, prefix)
 
 
 def flattened_params(unflattened_params, writeback_dict=None, prefix=None, delim="/"):
+    if not isinstance(unflattened_params, dict):
+        return unflattened_params
+
     prefix = prefix or []
     writeback_dict = writeback_dict if writeback_dict is not None else {}
     for key, value in unflattened_params.items():
@@ -66,3 +94,16 @@ def updated_params(base, additions):
 
     return params
 
+def params_str(params):
+    return pformat(flattened_params(params))
+
+def params_equal(params, other_params):
+    a = flattened_params(params)
+    b = flattened_params(other_params)
+    return a.keys() == b.keys() and (
+        all(
+            isinstance(a[key], hp_apply) or (a[key] == b[key])
+            for key in a.keys()
+        )
+    )
+        

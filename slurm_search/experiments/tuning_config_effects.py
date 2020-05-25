@@ -1,26 +1,16 @@
-from code import interact
 from math import log
-from pprint import pprint
-from sys import argv
 
 from hyperopt import hp
 import numpy as np
 
 from slurm_search.experiment import (
-    experiment_details,
     random_sampling,
-    run_experiment,
     use,
 )
 from slurm_search.experiments.all_tools import return_mean
 from slurm_search.experiments.display_tools import (
     display_setting_surface,
     display_setting_cdf_surface,
-)
-from slurm_search.params import (
-    params_from_args,
-    unflattened_params,
-    updated_params,
 )
 
 def search_return_cdf(search_hp, search_seed):
@@ -33,7 +23,7 @@ def search_return_cdf(search_hp, search_seed):
             method="inline",
         ),
         sample_count="search_hp:setting_samples",
-        method="slurm",
+        method="search:method",
         threads="search:threads",
     )
 
@@ -44,15 +34,14 @@ def search_return_cdf(search_hp, search_seed):
             "run_seed",
             return_mean("env", "agent", "hp", "run_params", "run_seed"),
             sample_count="eval:run_samples",
-            method="slurm",
+            method="search:method",
             threads="eval:threads",
         )
     ]
 
     return best_hp_samples["cdf"]
 
-
-def demo_hp_effects():
+def tuning_config_effects():
     search_samples = random_sampling(
         ("search", "search_space"),
         search_return_cdf(
@@ -72,7 +61,7 @@ def demo_hp_effects():
         "search_hp_var": search_hp_var,
     }
 
-default_demo_tuning_curve_config = {
+tuning_config_effects_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
 
@@ -95,6 +84,7 @@ default_demo_tuning_curve_config = {
 
     "search": {
         "threads": 8,
+        "method": "slurm",
     },
 
     "eval": {
@@ -103,49 +93,28 @@ default_demo_tuning_curve_config = {
     },
 }
 
-def demo_hp_improvement():
-    overrides = {
-        "agent": "classic:a2c",
-        "env":  "classic:CartPole-v1",
-    }
-    overrides = updated_params(
-        overrides,
-        unflattened_params(params_from_args(argv[1:]))
-    )
-    print("Override params:")
-    pprint(overrides)
-    print("All params:")
-    pprint(updated_params(default_demo_hp_effects_config, overrides))
+tuning_config_effects_debug_overrides = {
+    "search": {"method": "inline"},
+    "agent": "debug",
+}
 
-    details = experiment_details(
-        demo_tuning_curve,
-        defaults=default_demo_tuning_curve_config,
-        overrides=overrides,
-    )
-    for key, value in details.items():
-        print(f"{key}:")
-        print(value)
 
-    return 0
-    session_name, results = run_experiment(
-        demo_tuning_curve,
-        defaults=default_demo_hp_effects_config,
-        overrides=overrides,
-    )
-
-    print(session_name)
-    pprint(results)
-
+def display_tuning_config_effects(session_name, results):
     display_setting_surface(
         results["space_hp_mean"],
         setting_dims=["entropy_loss_scaling", "lr"],
-        zlabel="Mean return",
-        fig_name="setting_mean_return",
+       zlabel="Mean return",
+        fig_name=f"{session_name}_setting_mean_return",
     )
     display_setting_cdf_surface(
         results["space_hp_cdf"],
         zlabel="Return",
-        fig_name="setting_percentile_return",
+        fig_name=f"{session_name}_setting_percentile_return",
     )
 
-    interact(local=locals())
+tuning_config_effects_exp = {
+    "config": tuning_config_effects_config,
+    "debug_overrides": tuning_config_effects_debug_overrides,
+    "display_func": display_tuning_config_effects,
+    "experiment_func": tuning_config_effects,
+}

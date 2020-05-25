@@ -1,5 +1,19 @@
 """
-Interruptible ssearch-based experimental protocols.
+Experimental protocol DSL with interruptable distributed execution and
+associated utilities. Supports experiment interrupt / resume, parallelization,
+pretty printing, and more. Provides tools for clearly describing and analyzing
+different experiments.
+
+This level of granularity focuses on sampling details. Equation pretty printing
+is partially available, and can be easily extended.
+
+Uses an AST to specify the experiment. Various nodes may create search or
+sampling sessions (using slurm search tools) and launch / collect results during
+execution. Resume capabilities provided by tracking results by AST path.
+
+Execution and resume relies on the AST to deduplicate effort. This requires an
+amount of determinism for resume to work correctly; since nodes can be reached
+at multiple locations of an AST, they _must_ start with the same first path.
 """
 from contextlib import contextmanager
 from datetime import datetime
@@ -10,16 +24,21 @@ from subprocess import Popen
 from time import sleep
 
 import numpy as np
+from hyperopt import space_eval
 
 from slurm_search.params import (
+    mapped_params,
     unflattened_params,
     updated_params,
+    params_str,
+    params_equal,
 )
 from slurm_search.slurm_search import (
     launch_slurm_search_workers,
 )
 from slurm_search.search_session import (
     create_search_session,
+    delete_active_search_trials,
     next_search_trial,
     search_session_names,
     search_session_progress,
@@ -44,10 +63,13 @@ def create_experiment(func, base_params, override_params):
     while session_name in existing_session_names:
         session_name = "exp:" + random_phrase()
 
+    print(f"Creating experiment {session_name}...")
+
     with lock(session_name):
         create_session_state(
             session_name,
             {
+                "status": "active",
                 "func": func,
                 "base_params": base_params,
                 "override_params": override_params,
@@ -61,16 +83,45 @@ def create_experiment(func, base_params, override_params):
 
     return session_name
 
+def experiment_params(session_name):
+    with lock(session_name):
+        return session_state(session_name)["params"]
+
 def update_experiment_results(session_name, results):
     with lock(session_name):
         experiment_state = session_state(session_name)
         experiment_state["results"] = results
+        experiment_state["status"] = "complete"
         update_session_state(session_name, experiment_state)
+
+def update_experiment_partial_result(session_name, ast_path, partial_result):
+    with lock(session_name):
+        experiment_state = session_state(session_name)
+
+        node = experiment_state.setdefault("partial_results", {})
+        for part in ast_path:
+            node = node.setdefault(part, {})
+        node["partial_result"] = partial_result
+
+        update_session_state(session_name, experiment_state)
+
+def experiment_partial_result(session_name, ast_path):
+    with lock(session_name):
+        experiment_state = session_state(session_name)
+
+        node = experiment_state.get("partial_results", {})
+        for part in ast_path:
+            node = node.get(part, {})
+
+        return node.get("partial_result", None)
 
 
 ## Experiment runtime management.
 _current_experiment = None
 _current_params = None
+
+def current_experiment():
+    return _current_experiment
 
 def param(name):
     params = _current_params
@@ -109,14 +160,31 @@ def accepts_param_names(func):
 
 # Experiment invocations.
 def nodes_evaluated(nodes_dict):
-    return {
-        key: value() if isinstance(value, Node) else value
-        for key, value in nodes_dict.items()
-    }
+    return mapped_params(
+        lambda value, path: (
+            value(ast_path=path)
+            if isinstance(value, Node) else value
+        ),
+        nodes_dict,
+    )
 
-def run_experiment(func, defaults, overrides):
+def run_experiment(func, defaults, overrides, resume=None):
+
     params = updated_params(defaults, overrides)
-    session_name = create_experiment(func, defaults, overrides)
+
+    if resume:
+        session_name = resume
+        if ":" not in session_name:
+            session_name = "exp:" + session_name
+
+        resume_params = experiment_params(session_name)
+
+        assert params_equal(resume_params, params), (
+            "Attempted to reload an experiment with the wrong parameters."
+        )
+
+    else:
+        session_name = create_experiment(func, defaults, overrides)
 
     global _current_experiment
     _current_experiment = session_name
@@ -129,6 +197,7 @@ def run_experiment(func, defaults, overrides):
 
     return session_name, results
 
+
 def nodes_details(nodes_dict):
     return {
         key: str(value) if isinstance(value, Node) else value
@@ -137,7 +206,6 @@ def nodes_details(nodes_dict):
 
 def experiment_details(func, defaults, overrides):
     params = updated_params(defaults, overrides)
-    # session_name = create_experiment(func, defaults, overrides)
 
     global _current_experiment
     _current_experiment = None
@@ -169,7 +237,7 @@ class CallNode(Node):
             **kwargs,
         ).arguments)
 
-    def __call__(self):
+    def __call__(self, ast_path=None):
         # Bind.
         params = dict(self.params)
         params.update({
@@ -214,11 +282,13 @@ class UseNode(Node):
                 self.expr[arg],
             )
 
-    def __call__(self):
+    def __call__(self, ast_path=None):
         param, value = self.param, self.value
 
         if isinstance(value, Node):
-            value = value()
+            value = value(
+                ast_path=ast_path + ["use_arg"],
+            )
 
         new_params = updated_params(
             params(),
@@ -227,7 +297,9 @@ class UseNode(Node):
             }),
         )
         with temporary_params(new_params):
-            return self.expr()
+            return self.expr(
+                ast_path=ast_path + ["use_val"],
+            )
 
     def __str__(self):
         top_padding = " " * (4 + len(self.param) + 3 + 4)
@@ -246,19 +318,43 @@ class SamplingResultsNode(Node):
         self.expr = expr
         self.attr_names = attr_names
 
-    def __call__(self):
-        return self.expr(*self.attr_names)
+    def __call__(self, ast_path=None):
+        return self.expr(
+            ast_path=ast_path + [",".join(sorted(self.attr_names))],
+            attrs=self.attr_names,
+        )
 
     def __str__(self):
         name = "_".join(self.attr_names)
         return f"{name}({self.expr})"
 
+
+class ParamsWrapper(object):
+    """
+    Wrapper class to prevent hyperopt from sampling from irrelevant spaces
+    in a random_search(). If we just used a dictionary, it would replace them
+    with samples.
+    """
+    def __init__(self, params):
+        self.params = params
+
 def random_sampling_objective(spec):
     spec, = spec
     func = spec["func"]
-    params = spec["params"]
+
+    params = updated_params(
+        spec["wrapped_params"].params,
+        unflattened_params({
+            spec["sampling_var"]: spec["sampling_value"],
+        }),
+    )
+
+    point_hash = params_str(spec["sampling_value"])
+
     with temporary_params(params):
-        results = func()
+        results = func(
+            ast_path=list(spec["ast_path"]) + ["point", point_hash],
+        )
 
     # So you can return interesting data.
     if isinstance(results, (int, float)):
@@ -309,7 +405,6 @@ class RandomSamplingNode(Node):
 
         self.sampling_var = sampling_var
         self.sampling_space = sampling_space
-        self.hidden_params = set()
 
         self.func = func
 
@@ -321,10 +416,10 @@ class RandomSamplingNode(Node):
         self.launched = False
         self.collected = False
 
-    def launch(self):
+    def launch(self, ast_path=None):
         if not self.launched:
             self.bind_params()
-            self.register_session()
+            self.load_session(ast_path=ast_path)
 
             if self.method == "cpu":
                 self.launch_cpu()
@@ -340,7 +435,6 @@ class RandomSamplingNode(Node):
 
     def bind_params(self):
         if isinstance(self.sampling_space, str):
-            self.hidden_params.add(self.sampling_space)
             self.sampling_space = param(self.sampling_space)
 
         if isinstance(self.sample_count, str):
@@ -354,7 +448,18 @@ class RandomSamplingNode(Node):
 
         self.params = params()
 
-    def register_session(self):
+    def load_session(self, ast_path):
+        partial_session_name = experiment_partial_result(
+            current_experiment(),
+            ast_path,
+        )
+        if partial_session_name:
+            delete_active_search_trials(partial_session_name)
+            self.session_name = partial_session_name
+        else:
+            self.register_session(ast_path)
+
+    def register_session(self, ast_path):
         session_type = "slurm:" if self.method == "slurm" else "sampling:"
 
         existing_session_names = search_session_names(
@@ -366,19 +471,12 @@ class RandomSamplingNode(Node):
         while session_name in existing_session_names:
             session_name = session_type + random_phrase()
 
-        params = updated_params(
-            self.params,
-            # Unflatten as sampling var may be a path.
-            unflattened_params({
-                self.sampling_var: self.sampling_space,
-            }),
-        )
-        for param in self.hidden_params:
-            del params[param]
-
         search_space_spec = {
             "func": self.func,
-            "params": params,
+            "wrapped_params": ParamsWrapper(self.params),
+            "sampling_var": self.sampling_var,
+            "sampling_value": self.sampling_space,
+            "ast_path": ast_path,
         }
 
         create_search_session(
@@ -386,7 +484,7 @@ class RandomSamplingNode(Node):
             objective=random_sampling_objective,
             algo="rand",
             space=[
-                search_space_spec
+                search_space_spec,
             ], # Wrapped because hyperopt is weird.
             max_evals=self.sample_count,
 
@@ -394,6 +492,13 @@ class RandomSamplingNode(Node):
             params=self.params,
             sampling_var=self.sampling_var,
             sampling_space=self.sampling_space,
+        )
+
+        # Register so we know how to resume
+        update_experiment_partial_result(
+            current_experiment(),
+            ast_path,
+            session_name,
         )
 
         self.session_name = session_name
@@ -460,9 +565,14 @@ class RandomSamplingNode(Node):
             print(f"Search {self.session_name} is active. Waiting 1 minute.")
             sleep(1 * MINUTE)
 
-    def __call__(self, *attrs):
+    def __call__(self, attrs=None, ast_path=None):
+
+        self.launch(ast_path=ast_path)
+
         if not attrs:
             attrs = ["all"]
+        if not isinstance(attrs, (list, tuple)):
+            attrs = [attrs]
 
         attr_result_dims = [
             (parts[0], ":".join(parts[1:]))
@@ -474,8 +584,6 @@ class RandomSamplingNode(Node):
             result_dims
             for attr, result_dims in attr_result_dims
         }
-
-        self.launch()
 
         result_dim_results = {
             result_dim: self.results(result_dim)
@@ -543,9 +651,15 @@ class RandomSamplingNode(Node):
             )["status"]
             assert status == "complete", status
 
-            self.setting_results = (
-                search_session_results(self.session_name)["setting_results"]
-            )
+            self.setting_results = [
+                (
+                    space_eval(self.sampling_space, setting),
+                    results,
+                )
+                for setting, results in (
+                        search_session_results(self.session_name)["setting_results"]
+                )
+            ]
 
             self.collected = True
 

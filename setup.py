@@ -10,13 +10,13 @@ setup(
 
     # TBD
     install_requires=[
+        "hyperopt",
     ],
 
     entry_points={
         "console_scripts": [
             "ssearch=slurm_search:main",
-            "exp_hp_imp=slurm_search.experiments:demo_hp_improvement",
-            "exp_tuning_curve=slurm_search.experiments:demo_tuning_curve",
+            "run_exp=slurm_search.display_experiment:display_experiment",
         ],
     }
 )

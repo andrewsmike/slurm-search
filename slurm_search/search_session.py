@@ -199,14 +199,14 @@ def search_session_progress(
 ):
     with lock(session_name):
         state = session_state(session_name)
-        trials = state["trials"]
+        trials = state.get("trials", [])
 
         session_type, short_name = session_name.split(":")
         return {
             "session_name": short_name,
             "session_type": session_type,
             "status": state["status"],
-            "max_trials": state["max_evals"],
+            "max_trials": state.get("max_evals", None),
             "completed": sum(
                 1
                 for trial in trials

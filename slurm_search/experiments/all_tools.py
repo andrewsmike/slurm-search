@@ -1,3 +1,5 @@
+from pprint import pprint
+
 import numpy as np
 
 from all.environments import AtariEnvironment, GymEnvironment
@@ -10,9 +12,10 @@ from slurm_search.experiment import accepts_param_names
 ## ALL target function
 def run_results(env, agent, hp, run_params, run_seed):
 
-    if "run_seed" in hp:
-        hp = dict(hp)
-        del hp["run_seed"]
+    if agent == "debug":
+        return {
+            "return_mean": hp["entropy_loss_scaling"] * hp["lr"] * 10000,
+        }
 
     train_frames = run_params["train_frames"]
     train_episodes = run_params["train_episodes"]

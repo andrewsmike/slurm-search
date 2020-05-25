@@ -67,10 +67,13 @@ def create_session_state(session_name, state):
 
 @needs_lock
 def session_state(session_name):
-    with open(session_state_path(session_name), "rb") as f:
-        content = load(f)
+    try:
+        with open(session_state_path(session_name), "rb") as f:
+            content = load(f)
 
-    return content
+        return content
+    except Exception as e:
+        raise RuntimeError(f"Caught error parsing {session_name}: {e}")
 
 @needs_lock
 def update_session_state(session_name, session_state):

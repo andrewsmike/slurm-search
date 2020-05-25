@@ -184,6 +184,9 @@ def display_setting_cdf_surface(
         ]
     setting_axis, result_axis = 0, 1
     setting_cdfs = np.sort(np.array(setting_cdfs), axis=result_axis)
+    setting_cdfs = setting_cdfs[
+        np.argsort(setting_cdfs.mean(axis=result_axis), axis=setting_axis)
+    ]
 
     display_surface(
         Z=setting_cdfs, # (Y, X) -> (settings, runs)

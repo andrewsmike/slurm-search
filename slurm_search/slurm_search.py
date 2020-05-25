@@ -169,8 +169,12 @@ def stop_all_slurm_searches(session_type="slurm"):
             search_type=session_type,
             filter_inactive=True,
     ):
-        disable_search_session(session_name)
-        print(f"[{session_name}] Disabled search. No more trials will start.")
+        try:
+            disable_search_session(session_name)
+            print(f"[{session_name}] Disabled search. No more trials will start.")
+        except Exception as e:
+            print(f"Encountered exception trying to stop {session_name}: {e}")
+
     print("TODO: You may want to kill the remaining slurm workers. They could take a while to die off.")
 
 def display_slurm_searches(search_type="slurm", show_inactive=False):
