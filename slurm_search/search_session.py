@@ -237,16 +237,24 @@ def search_session_active(session_name):
     Its workers may have been killed anomalously.
     """
     with lock(session_name):
-        state = session_state(session_name)
-        return state["status"] == "active"
+        try:
+            state = session_state(session_name)
+            return state["status"] == "active"
+        except:
+            return False
 
 def search_session_progress(
         session_name,
 ):
     with lock(session_name):
-        state = session_state(session_name)
-        trials = state.get("trials", [])
+        try:
+            state = session_state(session_name)
+        except:
+            state = {
+                "status": "corrupted",
+            }
 
+        trials = state.get("trials", [])
         session_type, short_name = session_name.split(":")
         return {
             "session_name": short_name,
