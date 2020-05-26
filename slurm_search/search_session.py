@@ -14,6 +14,7 @@ from datetime import datetime
 from hyperopt import fmin, rand, tpe, trials_from_docs, Trials, space_eval
 
 from slurm_search.locking import lock
+from slurm_search.random_phrase import random_phrase
 from slurm_search.session_state import *
 
 __all__ = [
@@ -262,6 +263,14 @@ def search_session_names(
         if not search_type or session_name.startswith(search_type + ":")
         if not filter_inactive or search_session_active(session_name)
     ]
+
+
+def unused_session_name(session_type):
+    session_name =  session_type + ":" + random_phrase()
+    while search_session_exists(session_name):
+        session_name = session_type + ":" + random_phrase()
+
+    return session_name
 
 def create_search_session(session_name, start_time=None, **args):
     with lock(session_name):

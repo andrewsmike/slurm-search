@@ -43,6 +43,7 @@ from slurm_search.search_session import (
     search_session_names,
     search_session_progress,
     search_session_results,
+    unused_session_name,
     update_search_results,
 )
 from slurm_search.session_state import (
@@ -57,11 +58,8 @@ from slurm_search.locking import lock
 
 ## Experiment persistence.
 def create_experiment(func, base_params, override_params):
-    existing_session_names = session_state_names()
 
-    session_name = "exp:" + random_phrase()
-    while session_name in existing_session_names:
-        session_name = "exp:" + random_phrase()
+    session_name = unused_session_name("exp")
 
     print(f"Creating experiment {session_name}...")
 
@@ -460,16 +458,9 @@ class RandomSamplingNode(Node):
             self.register_session(ast_path)
 
     def register_session(self, ast_path):
-        session_type = "slurm:" if self.method == "slurm" else "sampling:"
+        session_type = "slurm" if self.method == "slurm" else "sampling"
 
-        existing_session_names = search_session_names(
-            filter_inactive=False,
-            search_type=session_type,
-        )
-
-        session_name =  session_type + random_phrase()
-        while session_name in existing_session_names:
-            session_name = session_type + random_phrase()
+        session_name = unused_session_name(session_type=session_type)
 
         search_space_spec = {
             "func": self.func,
