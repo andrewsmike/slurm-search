@@ -204,20 +204,13 @@ def run_experiment(func, defaults, overrides, resume=None):
 
     return session_name, results
 
-
 def nodes_details(nodes_dict, abstract=False):
     str_func = (
-        (lambda value: value.abstract_expr_str())
+        (lambda value, path: value.abstract_expr_str())
         if abstract else
-        (lambda value: str(value))
+        (lambda value, path: str(value))
     )
-    if not isinstance(nodes_dict, dict):
-        return str_func(nodes_dict)
-
-    return {
-        key: str_func(value) if isinstance(value, Node) else value
-        for key, value in nodes_dict.items()
-    }
+    return mapped_params(str_func, nodes_dict)
 
 def experiment_details(func, defaults, overrides, abstract=False):
     params = updated_params(defaults, overrides)

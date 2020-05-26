@@ -69,7 +69,11 @@ def display_experiment():
         else:
             for key, value in details.items():
                 print(f"{key}:")
-                print(value)
+                if isinstance(value, (tuple, list)):
+                    for subvalue in value:
+                        print(subvalue)
+                else:
+                    print(value)
         return
 
     session_name, results = run_experiment(
