@@ -145,6 +145,17 @@ def temporary_params(next_params):
     finally:
         _current_params = prev_params
 
+@contextmanager
+def temporary_experiment(next_experiment):
+    global _current_experiment
+
+    prev_experiment = _current_experiment
+    try:
+        _current_experiment = next_experiment
+        yield None
+    finally:
+        _current_experiment = prev_experiment
+
 
 def accepts_param_names(func):
     @wraps(func)
@@ -185,12 +196,9 @@ def run_experiment(func, defaults, overrides, resume=None):
     else:
         session_name = create_experiment(func, defaults, overrides)
 
-    global _current_experiment
-    _current_experiment = session_name
-    global _current_params
-    _current_params = params
-
-    results = nodes_evaluated(func())
+    with temporary_experiment(session_name):
+        with temporary_params(params):
+            results = nodes_evaluated(func())
 
     update_experiment_results(session_name, results)
 
@@ -376,10 +384,11 @@ def random_sampling_objective(spec):
 
     point_hash = params_str(spec["sampling_value"])
 
-    with temporary_params(params):
-        results = func(
-            ast_path=list(spec["ast_path"]) + ["point", point_hash],
-        )
+    with temporary_experiment(spec["experiment"]):
+        with temporary_params(params):
+            results = func(
+                ast_path=list(spec["ast_path"]) + ["point", point_hash],
+            )
 
     # So you can return interesting data.
     if isinstance(results, (int, float)):
@@ -531,6 +540,7 @@ class SamplingNode(Node):
             "sampling_var": self.sampling_var,
             "sampling_value": self.sampling_space,
             "ast_path": ast_path,
+            "experiment": current_experiment(),
         }
 
         algo = {
