@@ -59,13 +59,18 @@ def display_experiment():
 
     if meta_params.get("display-ast", False):
         details = experiment_details(
-            exp_spec["exp_func"],
+            exp_spec["experiment_func"],
             defaults=exp_spec["config"],
             overrides=overrides,
+            abstract=meta_params["display-ast"] == "abstract",
         )
-        for key, value in details.items():
-            print(f"{key}:")
-            print(value)
+        if not isinstance(details, dict):
+            print(details)
+        else:
+            for key, value in details.items():
+                print(f"{key}:")
+                print(value)
+        return
 
     session_name, results = run_experiment(
         exp_spec["experiment_func"],

@@ -205,13 +205,21 @@ def run_experiment(func, defaults, overrides, resume=None):
     return session_name, results
 
 
-def nodes_details(nodes_dict):
+def nodes_details(nodes_dict, abstract=False):
+    str_func = (
+        (lambda value: value.abstract_expr_str())
+        if abstract else
+        (lambda value: str(value))
+    )
+    if not isinstance(nodes_dict, dict):
+        return str_func(nodes_dict)
+
     return {
-        key: str(value) if isinstance(value, Node) else value
+        key: str_func(value) if isinstance(value, Node) else value
         for key, value in nodes_dict.items()
     }
 
-def experiment_details(func, defaults, overrides):
+def experiment_details(func, defaults, overrides, abstract=False):
     params = updated_params(defaults, overrides)
 
     global _current_experiment
@@ -219,7 +227,7 @@ def experiment_details(func, defaults, overrides):
     global _current_params
     _current_params = params
 
-    details = nodes_details(func())
+    details = nodes_details(func(), abstract=abstract)
 
     return details
 
@@ -271,6 +279,15 @@ class CallNode(Node):
         )
         return f"{self.wrapper.__wrapped__.__name__}({args_str})"
 
+    def abstract_expr_str(self, measure_parts=None):
+        assert not measure_parts
+        args_str = ", ".join(
+            list(self.args) + [
+                f"{key}={val}"
+                for key, val in self.kwargs.items()
+            ]
+        )
+        return f"{self.wrapper.__wrapped__.__name__}({args_str})"
 
 class UseNode(Node):
     def __init__(self, param, value, expr=None):
@@ -312,8 +329,19 @@ class UseNode(Node):
         top_padding = " " * (4 + len(self.param) + 3 + 4)
         padded_value = str(self.value).replace("\n", "\n" + top_padding)
         return (
-            f"use({self.param} = {padded_value})[\n    " + 
+            f"use({self.param} = {padded_value})[\n    " +
             str(self.expr).replace("\n", "\n    ") +
+            "\n]"
+        )
+
+    def abstract_expr_str(self, measure_parts=None):
+        top_padding = " " * (4 + len(self.param) + 3 + 4)
+        padded_value = (
+            self.value.abstract_expr_str().replace("\n", "\n" + top_padding)
+        )
+        return (
+            f"use({self.param} = {padded_value})[\n    " +
+            self.expr.abstract_expr_str(measure_parts).replace("\n", "\n    ") +
             "\n]"
         )
 
@@ -361,6 +389,10 @@ class SamplingResultsNode(Node):
         name = ":".join(self.measure_spec)
         return f"{name}({self.expr})"
 
+    def abstract_expr_str(self, measure_parts=None):
+        assert not measure_parts
+        return self.expr.abstract_expr_str(measure_parts=self.measure_spec)
+
 
 class ParamsWrapper(object):
     """
@@ -384,15 +416,20 @@ def random_sampling_objective(spec):
 
     point_hash = params_str(spec["sampling_value"])
 
+    ast_path = list(spec["ast_path"]) + ["point", point_hash]
     with temporary_experiment(spec["experiment"]):
         with temporary_params(params):
             results = func(
-                ast_path=list(spec["ast_path"]) + ["point", point_hash],
+                ast_path=ast_path,
             )
 
+    loss_results = results
+    if spec["minimize_measure"]:
+        loss_results = func[spec["minimize_measure"]](ast_path=ast_path)
+
     # So you can return interesting data.
-    if isinstance(results, (int, float)):
-        loss = results
+    if isinstance(loss_results, (int, float)):
+        loss = loss_results
     else:
         loss = 0
 
@@ -458,6 +495,7 @@ class SamplingNode(Node):
             sample_count=None,
             method=None,
             threads=None,
+            minimize_measure=None,
     ):
 
         if isinstance(sampling_var_space, tuple):
@@ -476,6 +514,8 @@ class SamplingNode(Node):
         if (strategy == "enumerate"
             and isinstance(self.sampling_space, (list, tuple))):
             self.sample_count = len(self.sampling_space)
+
+        self.minimize_measure = minimize_measure
 
         self.method = method
         self.thread_count = threads
@@ -563,6 +603,7 @@ class SamplingNode(Node):
             sampling_var=self.sampling_var,
             sampling_space=self.sampling_space,
             strategy=self.strategy,
+            minimize_measure=self.minimize_measure,
         )
 
         # Register so we know how to resume
@@ -686,8 +727,56 @@ class SamplingNode(Node):
             "]"
         )
 
+    def abstract_expr_str(self, measure_parts=None):
+        if measure_parts:
+            measure_head, measure_rest = measure_parts[0], measure_parts[1:]
+            measure_str = measure_head + "_"
+        else:
+            measure_head, measure_rest = None, None
+            measure_str = ""
+
+        strategy_str = {
+            "enumerate": "enumeration_sampling",
+            "randomize": "random_sampling",
+            "minimize": "minimizing_sampling",
+        }[self.strategy]
+
+        func_str = self.func.abstract_expr_str(
+            measure_parts=measure_rest,
+        ).replace('\n', '\n    ')
+
+        func_name_str = f"{measure_str}{strategy_str}"
+        sample_sym = "~" if self.strategy != "enumerate" else "in"
+        if measure_head == "mean":
+            if self.strategy == "enumerate":
+                func_name_str = "1/n ∑"
+            elif self.strategy == "randomize":
+                func_name_str = "E"
+        elif measure_head == "std":
+            if self.strategy in ("randomize", "enumerate"):
+                func_name_str = "√ Var"
+        elif measure_head in ("min", "max","cdf", "argmin", "argmax"):
+            func_name_str = measure_head
+
+        if measure_head == "point_values":
+            return (
+                f"λ {self.sampling_var} in {self.sampling_space} -> (\n"
+                f"    {func_str}\n"
+                f")"
+            )
+
+        return (
+            f"{func_name_str}" +
+            f"({self.sampling_var} {sample_sym} {self.sampling_space}) [\n" +
+            f"    {func_str}\n"
+            "]"
+        )
+
 def random_sampling(*args, **kwargs):
     return SamplingNode(*args, strategy="randomize", **kwargs)
 
 def enumeration_sampling(*args, **kwargs):
     return SamplingNode(*args, strategy="enumerate", **kwargs)
+
+def minimizing_sampling(*args, **kwargs):
+    return SamplingNode(*args, strategy="minimize", **kwargs)
