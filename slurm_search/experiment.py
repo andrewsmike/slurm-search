@@ -574,6 +574,7 @@ class SamplingNode(Node):
             "sampling_value": self.sampling_space,
             "ast_path": ast_path,
             "experiment": current_experiment(),
+            "minimize_measure": self.minimize_measure,
         }
 
         algo = {
@@ -596,7 +597,6 @@ class SamplingNode(Node):
             sampling_var=self.sampling_var,
             sampling_space=self.sampling_space,
             strategy=self.strategy,
-            minimize_measure=self.minimize_measure,
         )
 
         # Register so we know how to resume

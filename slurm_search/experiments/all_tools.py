@@ -1,4 +1,5 @@
 from pprint import pprint
+from time import sleep
 
 import numpy as np
 
@@ -13,6 +14,7 @@ from slurm_search.experiment import accepts_param_names
 def run_results(env, agent, hp, run_params, run_seed):
 
     if agent.startswith("debug"):
+        sleep(4)
         return {
             "return_mean": hp["entropy_loss_scaling"] * hp["lr"] * 10000,
         }
