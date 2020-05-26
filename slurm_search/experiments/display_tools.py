@@ -4,10 +4,17 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.tri as tri
 
-def display_cdfs(cdfs, labels=None, title=None, fig_name=None, show=False):
+def display_cdfs(
+        cdfs,
+        labels=None,
+        ylabel=None,
+        title=None,
+        fig_name=None,
+        show=False,
+):
 
     for i, cdf in enumerate(cdfs):
-        cdf_percentiles = np.linspace(0, 1, len(cdfs))
+        cdf_percentiles = np.linspace(0, 1, len(cdf))
         label = None if not labels else labels[i]
         plt.plot(cdf_percentiles, cdf, label=label)
 
@@ -16,6 +23,10 @@ def display_cdfs(cdfs, labels=None, title=None, fig_name=None, show=False):
 
     if title:
         plt.title(title)
+
+    plt.xlabel("Percentile")
+    if ylabel:
+        plt.ylabel(ylabel)
 
     if show:
         plt.show()

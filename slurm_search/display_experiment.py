@@ -50,10 +50,12 @@ def display_experiment():
             exp_spec["debug_overrides"],
         )
 
+    all_params = updated_params(exp_spec["config"], overrides)
+
     print("Override params:")
     pprint(overrides)
     print("All params:")
-    pprint(updated_params(exp_spec["config"], overrides))
+    pprint(all_params)
 
     if meta_params.get("display-ast", False):
         details = experiment_details(
@@ -72,7 +74,8 @@ def display_experiment():
         resume=meta_params.get("resume", None),
     )
 
+    pprint(results)
     print(session_name)
-    exp_spec["display_func"](session_name, results)
+    exp_spec["display_func"](session_name, all_params, results)
 
     interact(local=locals())

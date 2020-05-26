@@ -114,7 +114,7 @@ hp_tuning_effects_debug_overrides = {
     "agent": "debug",
 }
 
-def display_hp_tuning_effects(session_name, results):
+def display_hp_tuning_effects(session_name, params, results):
     display_setting_surface(
         results["space_hp_mean"],
         setting_dims=["entropy_loss_scaling", "lr"],
