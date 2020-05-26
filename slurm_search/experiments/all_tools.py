@@ -12,7 +12,7 @@ from slurm_search.experiment import accepts_param_names
 ## ALL target function
 def run_results(env, agent, hp, run_params, run_seed):
 
-    if agent == "debug":
+    if agent.startswith("debug"):
         return {
             "return_mean": hp["entropy_loss_scaling"] * hp["lr"] * 10000,
         }
