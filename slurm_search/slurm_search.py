@@ -7,7 +7,7 @@ from os.path import expanduser, join
 from pprint import pprint
 from subprocess import Popen, run, TimeoutExpired
 from sys import argv, exit
-from time import sleep
+from time import sleep, time
 
 from slurm_search.locking import lock
 from slurm_search.objectives import (
@@ -312,10 +312,6 @@ def slurm_worker_id():
     return f"{job_id}_{slurm_array_task_index() or 0}_{getpid()}"
 
 def launch_next_generation(session_name, iteration):
-    print("Waiting for other workers to quit...")
-    # TODO: Wait properly
-    sleep(2 * MINUTE)
-
     print("Clearing incomplete trials...")
     delete_active_search_trials(session_name)
 
@@ -326,6 +322,34 @@ def launch_next_generation(session_name, iteration):
     )
 
 
+def update_slurm_iteration_timeout(session_name, iteration, timeout):
+    start_time = time()
+
+    with lock(session_name):
+        state = session_state(session_name)
+        state["slurm_iteration"] = iteration
+        state["slurm_iteration_start_time"] = start_time
+        state["slurm_iteration_end_time"] = start_time + timeout
+
+def slurm_iteration_remaining_time(session_name, iteration):
+    with lock(session_name):
+        state = session_state(session_name)
+
+    assert state["slurm_iteration"] == iteration, "Worker started way too late."
+
+    current_time = time()
+    return state["slurm_iteration_end_time"] - current_time
+
+def wait_on_slurm_search(session_name):
+    remaining_time = slurm_iteration_remaining_time(session_name, iteration)
+    search_active = (search_session_progress(session_name)["status"] == "active")
+    while (remaining_time > 0) and not search_active:
+        remaining_time = slurm_iteration_remaining_time(session_name, iteration)
+        search_active = (search_session_progress(session_name)["status"] == "active")
+        sleep(1 * MINUTE)
+
+    return not search_active
+
 def generational_work_on_slurm_search(
         session_name,
         timeout=2 * HOUR,
@@ -333,6 +357,13 @@ def generational_work_on_slurm_search(
 ):
     iteration = slurm_iteration()
     assert iteration, "This command must be run from within a slurm worker."
+
+    am_primary = (slurm_array_task_index() != 0)
+
+    if am_primary:
+        update_slurm_iteration_timeout(session_name, iteration, timeout)
+
+    timeout = slurm_iteration_remaining_time(session_name, iteration)
 
     search_complete = True
     try:
@@ -351,8 +382,7 @@ def generational_work_on_slurm_search(
         print("Search completed. Exiting.")
         return 0
 
-    am_not_primary = (slurm_array_task_index() != 0)
-    if am_not_primary:
+    if not am_primary:
         print("Search incomplete, but I am not the primary. Exiting.")
         return 0
 
@@ -361,9 +391,19 @@ def generational_work_on_slurm_search(
               f"max_iters ({max_iters}). Exiting.")
         return 0
 
-    print("Search didn't finish and I am the primary. Spawning next generation.")
+    print("Search didn't complete and I am the primary.")
+    print("Waiting for workers to finish.")
 
-    launch_next_generation(session_name, iteration + 1)
+    search_completed = wait_on_slurm_search(
+        session_name
+    )
+
+    if search_completed:
+        print("Search finished, exiting.")
+    else:
+        sleep(2 * MINUTE)
+
+        launch_next_generation(session_name, iteration + 1)
 
 def main():
     args = argv[1:]
