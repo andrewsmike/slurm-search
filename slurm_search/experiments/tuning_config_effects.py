@@ -1,4 +1,5 @@
 from math import log
+from random import choices
 
 from hyperopt import hp
 import numpy as np
@@ -41,14 +42,14 @@ tuning_config_effects_config = {
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
 
     "run_params": {
-        "train_frames": 100000,
+        "train_frames": 50000,
         "train_episodes": np.inf,
         "test_episodes": 100,
     },
 
     "search": {
         "setting_samples": 128,
-        "runs_per_setting": 32,
+        "runs_per_setting": 36,
 
         "threads": 16,
         "method": "slurm",
@@ -61,13 +62,54 @@ tuning_config_effects_debug_overrides = {
 }
 
 
+
+def alist_get(alist, lookup_key):
+    result, = [
+        value
+        for key, value in alist
+        if key == lookup_key
+    ]
+
+    return result
+
+def bootstrap_search_best_hp(
+        setting_run_samples,
+        setting_samples,
+        runs_per_setting,
+):
+    settings = [
+        setting
+        for setting, run_samples in setting_run_samples
+    ]
+    selected_settings = choices(settings, k=setting_samples)
+
+    selected_setting_samples = [
+        (
+            selected_setting,
+            choices(
+                alist_get(setting_run_samples, selected_setting),
+                k=runs_per_setting,
+            ),
+        )
+        for selected_setting in selected_settings
+    ]
+
+    return max(
+        selected_setting_samples,
+        key=lambda setting_sample: sum(setting_sample[1]),
+    )[0]
+
 def display_tuning_config_effects(session_name, params, results):
     """
-    Perform bootstrapping to analyze setting_samples, runs_per_setting's effects
+    Perform bootstrapping to analyzepppp setting_samples, runs_per_setting's effects
     on search performance.
     """
-    import pdb
-    pdb.set_trace()
+
+    # How we evaluate the results.
+    setting_means = [
+        (setting, result["mean"])
+        for setting, result in results
+    ]
 
     # How we generate the results.
     setting_run_samples = [
@@ -75,17 +117,59 @@ def display_tuning_config_effects(session_name, params, results):
         for setting, result in results
     ]
 
+    setting_samples_values = list(range(8, 96+1, 4))
+    runs_per_sample_values = list(range(4, 32+1, 2))
 
-    # How we evaluate the results.
-    setting_means = [
-        (setting, result["mean"])
-        for setting, result in results
-    ]
-    setting_stds = [
-        (setting, result["stds"])
-        for setting, result in results
+    bootstrap_trials_per_setting = 32
+
+    S_vals = len(setting_samples_values)
+    R_vals = len(runs_per_sample_values)
+    T_vals = bootstrap_trials_per_setting
+    S_val_axis, R_val_axis, T_axis = 0, 1, 2
+    setting_searches_cdf = np.array([
+        [
+            [
+                alist_get(
+                    setting_means,
+                    bootstrap_search_best_hp(
+                        setting_run_samples,
+                        setting_samples=setting_samples,
+                        runs_per_setting=runs_per_sample,
+                    ),
+                )
+                for trial_index in range(bootstrap_trials_per_setting)
+            ]
+            for runs_per_sample in runs_per_sample_values
+        ]
+        for setting_samples in setting_samples_values
+    ])
+
+    setting_search_means = setting_searches_cdf.mean(axis=T_axis)
+
+    setting_search_points = [
+        (
+            {
+                "Setting samples": setting_samples_values[S_val_index],
+                "Runs per sample": runs_per_sample_values[R_val_index],
+            },
+            setting_search_means[S_val_index][R_val_index]
+        )
+        for S_val_index in range(S_vals)
+        for R_val_index in range(R_vals)
     ]
 
+    display_setting_surface(
+        setting_search_points,
+        setting_dims=["Setting samples", "Runs per sample"],
+        zlabel="Mean return",
+        fig_name=f"tuning_config_mean_{session_name}",
+    )
+
+    display_setting_cdf_surface(
+        setting_searches_cdf.reshape((S_vals * R_vals), T_vals),
+        zlabel="Mean return",
+        fig_name=f"tuning_config_cdf_{session_name}",
+    )
 
 
 tuning_config_effects_exp = {
