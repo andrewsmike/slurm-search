@@ -66,6 +66,11 @@ def unflattened_params(flattened_params, delim=":"):
 
 
 def parsed_value(value):
+    if "," in value:
+        return [
+            parsed_value(subval)
+            for subval in value.split(",")
+        ]
     try:
         return int(value)
     except:
