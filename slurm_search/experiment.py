@@ -24,7 +24,7 @@ from subprocess import Popen
 from time import sleep
 
 import numpy as np
-from hyperopt import space_eval
+from hyperopt import hp, space_eval
 
 from slurm_search.params import (
     mapped_params,
@@ -93,6 +93,7 @@ def update_experiment_results(session_name, results):
         update_session_state(session_name, experiment_state)
 
 def update_experiment_partial_result(session_name, ast_path, partial_result):
+    print(f"[{'.'.join(ast_path)}] {partial_result}")
     with lock(session_name):
         experiment_state = session_state(session_name)
 
@@ -311,19 +312,45 @@ class UseNode(Node):
 def use(param, value):
     return UseNode(param, value)
 
+def setting_result_tree_measurement(setting_results, measure_spec):
+    """
+    Setting result tree: List[setting, Either[results_dict, str, num]]
+    """
+    measure_head, measure_rest = measure_spec[0], measure_spec[1:]
+
+    if measure_rest:
+        setting_results = [
+            (
+                setting,
+                setting_result_tree_measurement(
+                    results["point_values"],
+                    measure_rest,
+                ),
+            )
+            for setting, results in setting_results
+        ]
+
+    return setting_result_measurements(
+        setting_results,
+    )[measure_head]
+
 class SamplingResultsNode(Node):
-    def __init__(self, expr, attr_names):
+    def __init__(self, expr, measure_spec_str):
         self.expr = expr
-        self.attr_names = attr_names
+        self.measure_spec = measure_spec_str.split(":")
 
     def __call__(self, ast_path=None):
-        return self.expr(
-            ast_path=ast_path + [",".join(sorted(self.attr_names))],
-            attrs=self.attr_names,
+        setting_result_tree = self.expr(
+            ast_path=ast_path + [":".join(self.measure_spec)],
+        )["point_values"]
+
+        return setting_result_tree_measurement(
+            setting_result_tree,
+            self.measure_spec,
         )
 
     def __str__(self):
-        name = "_".join(self.attr_names)
+        name = ":".join(self.measure_spec)
         return f"{name}({self.expr})"
 
 
@@ -367,7 +394,35 @@ def random_sampling_objective(spec):
     }
 
 
-class RandomSamplingNode(Node):
+def setting_result_measurements(setting_results, extra_measurements=None):
+    results = [result for setting, result in setting_results]
+    if isinstance(results[0], (int, float)):
+        result_dist = np.array(results)
+
+        sorted_setting_results = sorted(
+            setting_results,
+            key=lambda setting_result: setting_result[1],
+        )
+    else:
+        result_dist = np.zeros(len(results))
+
+        sorted_setting_results = setting_results
+
+    return dict(**{
+        "mean": result_dist.mean(),
+        "std": result_dist.std(),
+        "min": result_dist.min(),
+        "max": result_dist.max(),
+        "cdf": np.sort(result_dist),
+        "argmin": sorted_setting_results[0][0],
+        "argmax": sorted_setting_results[-1][0],
+        "point_values": sorted_setting_results,
+    }, **(extra_measurements or {})
+    )
+
+
+
+class SamplingNode(Node):
     """
     Random sampling of a parameter.
 
@@ -390,6 +445,7 @@ class RandomSamplingNode(Node):
             self,
             sampling_var_space,
             func,
+            strategy="randomize",
             sample_count=None,
             method=None,
             threads=None,
@@ -406,7 +462,11 @@ class RandomSamplingNode(Node):
 
         self.func = func
 
+        self.strategy = strategy
         self.sample_count = sample_count
+        if (strategy == "enumerate"
+            and isinstance(self.sampling_space, (list, tuple))):
+            self.sample_count = len(self.sampling_space)
 
         self.method = method
         self.thread_count = threads
@@ -426,23 +486,26 @@ class RandomSamplingNode(Node):
 
             self.launched = True
 
-    def __getitem__(self, attr_names):
-        if not isinstance(attr_names, tuple):
-            attr_names = [attr_names]
-        return SamplingResultsNode(self, list(attr_names))
+    def __getitem__(self, measure_spec):
+        if isinstance(measure_spec, tuple):
+            measure_spec, = measure_spec
+        return SamplingResultsNode(self, measure_spec)
 
     def bind_params(self):
         if isinstance(self.sampling_space, str):
             self.sampling_space = param(self.sampling_space)
+            if self.strategy == "enumerate":
+                assert isinstance(self.sampling_space, (list, tuple))
+                self.sample_count = len(self.sampling_space)
 
         if isinstance(self.sample_count, str):
-            self.sample_count = param(self.sample_count)
+            self.sample_count = int(param(self.sample_count))
 
         if self.method not in ("inline", "cpu", "slurm"):
             self.method = param(self.method)
 
         if isinstance(self.thread_count, str):
-            self.thread_count = param(self.thread_count)
+            self.thread_count = int(param(self.thread_count))
 
         self.params = params()
 
@@ -470,10 +533,16 @@ class RandomSamplingNode(Node):
             "ast_path": ast_path,
         }
 
+        algo = {
+            "enumerate": "enumeration",
+            "randomize": "rand",
+            "minimize": "tpe",
+        }[self.strategy]
+
         create_search_session(
             session_name,
             objective=random_sampling_objective,
-            algo="rand",
+            algo=algo,
             space=[
                 search_space_spec,
             ], # Wrapped because hyperopt is weird.
@@ -483,6 +552,7 @@ class RandomSamplingNode(Node):
             params=self.params,
             sampling_var=self.sampling_var,
             sampling_space=self.sampling_space,
+            strategy=self.strategy,
         )
 
         # Register so we know how to resume
@@ -499,7 +569,7 @@ class RandomSamplingNode(Node):
             while True:
                 self.sample_once(worker_id="cpu0")
         except ValueError as e:
-            pass
+            assert str(e) == "No more trials to run."
 
     def sample_once(self, worker_id):
         trial_id, next_sample = (
@@ -556,82 +626,16 @@ class RandomSamplingNode(Node):
             print(f"Search {self.session_name} is active. Waiting 1 minute.")
             sleep(1 * MINUTE)
 
-    def __call__(self, attrs=None, ast_path=None):
+    def __call__(self, ast_path=None):
 
         self.launch(ast_path=ast_path)
 
-        if not attrs:
-            attrs = ["all"]
-        if not isinstance(attrs, (list, tuple)):
-            attrs = [attrs]
-
-        attr_result_dims = [
-            (parts[0], ":".join(parts[1:]))
-             for attr in attrs
-             for parts in (attr.split(":"),)
-        ]
-
-        result_dims = {
-            result_dims
-            for attr, result_dims in attr_result_dims
-        }
-
-        result_dim_results = {
-            result_dim: self.results(result_dim)
-            for result_dim in result_dims
-        }
-
-        result_parts = [
-            (result_dim_results[result_dim][attr]
-             if attr != "all" else
-             result_dim_results[result_dim])
-            for attr, result_dim in attr_result_dims
-        ]
-        if len(attrs) == 1:
-            return result_parts[0]
-        else:
-            return result_parts
-
-    def results(self, result_dim=None):
         self.collect_results()
 
-        setting_results = [
-            (
-                setting,
-                (results["result"]
-                 if not result_dim else
-                 results["result"][result_dim])
-            )
-            for setting, results in self.setting_results
-        ]
-        results = [
-            results
-            for setting, results in setting_results
-        ]
-
-        if isinstance(results[0], (int, float)):
-            result_dist = np.array(results)
-
-            sorted_setting_results = sorted(
-                setting_results,
-                key=lambda setting_result: setting_result[1],
-            )
-        else:
-            result_dist = np.zeros(len(results))
-
-            sorted_setting_results = setting_results
-
-        return {
-            "mean": result_dist.mean(),
-            "std": result_dist.std(),
-            "min": result_dist.min(),
-            "max": result_dist.max(),
-            "cdf": np.sort(result_dist),
-            "argmin": sorted_setting_results[0][0],
-            "argmax": sorted_setting_results[-1][0],
-            "point_values": sorted_setting_results,
-            "session_name": self.session_name,
-        }
+        return setting_result_measurements(
+            self.setting_results,
+            extra_measurements={"session_name": self.session_name}
+        )
 
     def collect_results(self):
         if not self.collected:
@@ -642,10 +646,17 @@ class RandomSamplingNode(Node):
             )["status"]
             assert status == "complete", status
 
+            sampling_space = self.sampling_space
+            if self.strategy == "enumerate":
+                sampling_space = hp.choice(
+                    self.sampling_var,
+                    sampling_space,
+                )
+
             self.setting_results = [
                 (
-                    space_eval(self.sampling_space, setting),
-                    results,
+                    space_eval(sampling_space, setting),
+                    results["result"],
                 )
                 for setting, results in (
                         search_session_results(self.session_name)["setting_results"]
@@ -657,7 +668,7 @@ class RandomSamplingNode(Node):
     def __str__(self):
         func_str = str(self.func).replace('\n', '\n    ')
         return (
-            f"RandomSampling[{self.sampling_var} ~ {self.sampling_space}](\n" +
+            f"Sampling[{self.sampling_var} ~ {self.sampling_space}](\n" +
             f"    {func_str},\n" +
             f"    sample_count={self.sample_count},\n" +
             f"    method={self.method},\n" +
@@ -666,4 +677,7 @@ class RandomSamplingNode(Node):
         )
 
 def random_sampling(*args, **kwargs):
-    return RandomSamplingNode(*args, **kwargs)
+    return SamplingNode(*args, strategy="randomize", **kwargs)
+
+def enumeration_sampling(*args, **kwargs):
+    return SamplingNode(*args, strategy="enumerate", **kwargs)

@@ -29,7 +29,10 @@ def hp_tuning_effects():
 
     best_hp = space_samples["argmax:mean"]
     worst_hp = space_samples["argmin:mean"]
-    space_returns_mean_std = space_samples["mean:mean", "std:mean"]
+    space_returns_mean_std = (
+        space_samples["mean:mean"],
+        space_samples["std:mean"],
+    )
 
     best_hp_samples = use("hp", best_hp)[
         random_sampling(
@@ -51,8 +54,8 @@ def hp_tuning_effects():
         )
     ]
 
-    best_hp_returns_mean_std = best_hp_samples["mean", "std"]
-    worst_hp_returns_mean_std = worst_hp_samples["mean", "std"]
+    best_hp_returns_mean_std = best_hp_samples["mean"], best_hp_samples["std"]
+    worst_hp_returns_mean_std = worst_hp_samples["mean"], worst_hp_samples["std"]
 
     best_hp_cdf = best_hp_samples["cdf"]
     worst_hp_cdf = worst_hp_samples["cdf"]
@@ -90,7 +93,7 @@ hp_tuning_effects_config = {
 
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
 
-    "run": {
+    "run_params": {
         "train_frames": 100000,
         "train_episodes": np.inf,
         "test_episodes": 100,

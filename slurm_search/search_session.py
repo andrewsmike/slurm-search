@@ -11,7 +11,15 @@ hyperopt state, record results in state.)
 from copy import deepcopy
 from datetime import datetime
 
-from hyperopt import fmin, rand, tpe, trials_from_docs, Trials, space_eval
+from hyperopt import (
+    fmin,
+    hp,
+    rand,
+    tpe,
+    trials_from_docs,
+    Trials,
+    space_eval,
+)
 
 from slurm_search.locking import lock
 from slurm_search.random_phrase import random_phrase
@@ -31,8 +39,27 @@ __all__ = [
     "search_session_progress",
     "search_session_results",
     "update_search_results",
+    "unused_session_name",
 ]
 
+def updated_enum_trial(trial, var_name, next_index):
+    updated_trial = deepcopy(trial)
+    updated_trial["misc"]["idxs"][var_name][0] = next_index
+    updated_trial["misc"]["vals"][var_name][0] = next_index
+
+    return updated_trial
+
+def next_enum_index(trials, var_name):
+    used_indices = {
+        trial["misc"]["vals"][var_name][0]
+        for trial in trials
+    }
+    available_indices = (
+        set(range(max(used_indices, default=0) + 2))
+        - used_indices
+    )
+
+    return min(available_indices)
 
 def state_next_trial(state, worker_id):
     prev_trials = state['trials']
@@ -45,22 +72,41 @@ def state_next_trial(state, worker_id):
         new_hparams.append(hp)
         raise ValueError
 
-    algo = {
+    hp_algos = {
         "rand": rand.suggest,
         "tpe": tpe.suggest,
-    }[state["algo"]]
+        "enumeration": rand.suggest, # We throw the sample here out.
+    }
+
+    if state["strategy"] == "enumerate":
+        space = deepcopy(state["space"][0])
+        space["sampling_value"] = (
+            hp.choice(space["sampling_var"], space["sampling_value"])
+        )
+    else:
+        space = state["space"][0]
 
     try:
         fmin(
             capture_hparams,
-            space=state["space"],
-            algo=algo,
+            space=[space],
+            algo=hp_algos[state["algo"]],
             trials=hyperopt_trials,
             max_evals=len(prev_trials) + 1,
             show_progressbar=False,
         )
     except ValueError as e:
         pass
+
+    # When enumerating, throw out the random HP values, and pick the next index.
+    if state["strategy"] == "enumerate":
+        sampling_var = state["sampling_var"]
+        next_index = next_enum_index(state['trials'], sampling_var)
+        new_trial[0] = updated_enum_trial(
+            new_trial[0],
+            sampling_var,
+            next_index,
+        )
 
     new_trial[0]["worker_id"] = worker_id
 
@@ -141,7 +187,6 @@ def next_search_trial(session_name, worker_id):
         state = session_state(session_name)
 
         if trials_exhausted(state):
-            print("No more trials to run.")
             raise ValueError(
                 "No more trials to run."
             )
