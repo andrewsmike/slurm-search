@@ -48,8 +48,8 @@ tuning_config_effects_config = {
     },
 
     "search": {
-        "setting_samples": 128,
-        "runs_per_setting": 36,
+        "setting_samples": 112,
+        "runs_per_setting": 32,
 
         "threads": 16,
         "method": "slurm",
@@ -118,7 +118,7 @@ def display_tuning_config_effects(session_name, params, results):
     ]
 
     setting_samples_values = list(range(8, 96+1, 4))
-    runs_per_sample_values = list(range(4, 32+1, 2))
+    runs_per_sample_values = list(range(4, 28+1, 2))
 
     bootstrap_trials_per_setting = 32
 

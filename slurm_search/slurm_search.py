@@ -363,7 +363,7 @@ def wait_on_slurm_search(session_name, iteration):
 
 def generational_work_on_slurm_search(
         session_name,
-        timeout=2 * MINUTE,
+        timeout=2 * HOUR,
         max_iters=5,
 ):
     iteration = slurm_iteration()
