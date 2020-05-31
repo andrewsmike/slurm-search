@@ -521,10 +521,13 @@ class SamplingNode(Node):
             self.bind_params()
             self.load_session(ast_path=ast_path)
 
-            if self.method == "cpu":
-                self.launch_cpu()
-            elif self.method == "slurm":
-                self.launch_slurm()
+            # Skip launch on resume if already completed.
+            status = search_session_progress(self.session_name)["status"]
+            if status != "complete":
+                if self.method == "cpu":
+                    self.launch_cpu()
+                elif self.method == "slurm":
+                    self.launch_slurm()
 
             self.launched = True
 
