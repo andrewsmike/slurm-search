@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from code import interact
+from copy import deepcopy
 from glob import glob
 import logging
 from os import getenv, getpid, makedirs
@@ -255,7 +256,14 @@ def inspect_slurm_search_state(session_name):
         state = session_state(session_name)
 
     interact(
-        local={"state": state, "pprint": pprint},
+        local={
+            "deepcopy": deepcopy,
+            "lock": lock,
+            "pprint": pprint,
+            "session_name": session_name,
+            "state": state,
+            "update_session_state": update_session_state,
+        },
         banner=(
             "Dropping into interactive session.\n"
             "Try 'pprint(state)'."
