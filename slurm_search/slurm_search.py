@@ -122,7 +122,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
         slurm_args.update({
             #"mem-per-cpu": 300,
             #"time": "05:00",
-            "time": "02:10:00",
+            "time": "03:40:00",
             "mem-per-cpu": 2000,
             "gres": "gpu:1",
             "partition": "1080ti-short",
@@ -313,7 +313,10 @@ def slurm_array_task_index():
         return int(task_index)
 
 def slurm_array_task_count():
-    return getenv("SLURM_ARRAY_TASK_COUNT", None)
+    return (
+        int(getenv("SLURM_ARRAY_TASK_MAX", 0))
+        - int(getenv("SLURM_ARRAY_TASK_MIN", 0))
+    ) + 1
 
 def slurm_worker_id():
     job_id = getenv("SLURM_JOB_ID", "UNKNOWN")
@@ -363,7 +366,7 @@ def wait_on_slurm_search(session_name, iteration):
 
 def generational_work_on_slurm_search(
         session_name,
-        timeout=2 * HOUR,
+        timeout=3 * HOUR + 30 * MINUTE,
         max_iters=5,
 ):
     iteration = slurm_iteration()
