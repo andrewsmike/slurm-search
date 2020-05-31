@@ -7,13 +7,23 @@ __all__ = [
     "flattened_params",
     "params_from_args",
     "unflattened_params",
+    "unwrapped_settings",
     "updated_params",
     "params_str",
     "params_equal",
 ]
 
+def unwrapped_settings(settings):
+    return {
+        key: (value
+              if not isinstance(value, list)
+                  and len(value) == 0
+              else value[0])
+        for key, value in settings.items()
+    }
+
 def mapped_params(mapper_func, data, prefix=None):
-    prefix = []
+    prefix = prefix or []
     if isinstance(data, dict):
         return {
             key: mapped_params(mapper_func, value, prefix + [key])

@@ -23,6 +23,7 @@ from hyperopt import (
 
 from slurm_search.locking import lock
 from slurm_search.random_phrase import random_phrase
+from slurm_search.params import unwrapped_settings
 from slurm_search.session_state import *
 
 __all__ = [
@@ -278,15 +279,6 @@ def search_session_progress(
                 if trial_active(trial)
             ),
         }
-
-def unwrapped_settings(settings):
-    return {
-        key: (value
-              if not isinstance(value, list)
-                  and len(value) == 0
-              else value[0])
-        for key, value in settings.items()
-    }
 
 def search_session_results(session_name):
     with lock(session_name):
