@@ -154,9 +154,15 @@ def trial_active(trial):
     return (trial["result"].get("status", None) != "ok")
 
 def trial_with_tid(trial, new_tid):
+    old_tid = trial["misc"]["tid"]
     new_trial = deepcopy(trial)
     new_trial["tid"] = new_tid
     new_trial["misc"]["tid"] = new_tid
+    for var_name, var_idx in new_trial["misc"]["idxs"].items():
+        if isinstance(var_idx, list) and len(var_idx) == 1:
+            if var_idx[0] == old_tid:
+                var_idx[0] = new_tid
+
     return new_trial
 
 def state_without_active_trials(search_state):
@@ -303,6 +309,7 @@ def search_session_results(session_name):
         return {
             "search_args": search_args,
             "setting_results": setting_results,
+            "trials": state["trials"],
         }
 
 
