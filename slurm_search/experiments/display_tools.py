@@ -43,8 +43,10 @@ def display_surface(
         ylabel=None,
         zlabel=None,
         title=None,
-        show_points=False,
         view_angle=160,
+        show_points=False,
+        product_contours=False,
+
         fig_name=None,
         show=False,
 ):
@@ -129,6 +131,13 @@ def display_surface(
     )
     fig_contour.colorbar(cntr1, ax=ax_contour)
 
+    if product_contours:
+        ax_contour.contour(
+            X, Y, X * Y,
+            levels=10,
+            color="b"
+        )
+
     if show_points:
         ax_contour.plot(orig_X, orig_Y, "ko", ms=3)
 
@@ -154,6 +163,7 @@ def display_setting_surface(
         title=None,
         fig_name=None,
         show=False,
+        product_contours=False,
 ):
     X_label, Y_label = setting_dims
 
@@ -175,6 +185,7 @@ def display_setting_surface(
         zlabel=zlabel or "Result",
         show_points=True,
         view_angle=-140,
+        product_contours=product_contours,
 
         fig_name=fig_name,
         title=title,

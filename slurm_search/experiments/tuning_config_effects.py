@@ -42,7 +42,7 @@ tuning_config_effects_config = {
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
 
     "run_params": {
-        "train_frames": 50000,
+        "train_frames": 75000,
         "train_episodes": np.inf,
         "test_episodes": 100,
     },
@@ -117,10 +117,10 @@ def display_tuning_config_effects(session_name, params, results):
         for setting, result in results
     ]
 
-    setting_samples_values = list(range(8, 96+1, 4))
-    runs_per_sample_values = list(range(4, 28+1, 2))
+    setting_samples_values = list(range(8, 136+1, 4))
+    runs_per_sample_values = list(range(4, 36+1, 2))
 
-    bootstrap_trials_per_setting = 32
+    bootstrap_trials_per_setting = 256
 
     S_vals = len(setting_samples_values)
     R_vals = len(runs_per_sample_values)
@@ -163,6 +163,7 @@ def display_tuning_config_effects(session_name, params, results):
         setting_dims=["Setting samples", "Runs per sample"],
         zlabel="Mean return",
         fig_name=f"tuning_config_mean_{session_name}",
+        product_contours=True,
     )
 
     display_setting_cdf_surface(
