@@ -795,6 +795,7 @@ class SamplingNode(Node):
             f"    sample_count={self.sample_count},\n" +
             f"    method={self.method},\n" +
             f"    threads={self.thread_count},\n" +
+            f"    strategy={self.strategy},\n" +
             "]"
         )
 
