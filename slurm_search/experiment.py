@@ -29,6 +29,7 @@ from hyperopt import fmin, hp, space_eval, tpe, trials_from_docs
 from slurm_search.params import (
     mapped_params,
     unflattened_params,
+    unwrapped_settings,
     updated_params,
     params_str,
     params_equal,
@@ -341,7 +342,7 @@ class UseNode(Node):
 def use(param, value):
     return UseNode(param, value)
 
-def setting_result_tree_measurement(setting_results, measure_spec):
+def setting_result_tree_measurement(space, setting_results, trials, measure_spec):
     """
     Setting result tree: List[setting, Either[results_dict, str, num]]
     """
@@ -352,7 +353,9 @@ def setting_result_tree_measurement(setting_results, measure_spec):
             (
                 setting,
                 setting_result_tree_measurement(
+                    None,
                     results["point_values"],
+                    None,
                     measure_rest,
                 ),
             )
@@ -360,7 +363,9 @@ def setting_result_tree_measurement(setting_results, measure_spec):
         ]
 
     return setting_result_measurements(
+        space,
         setting_results,
+        trials,
     )[measure_head]
 
 class SamplingResultsNode(Node):
@@ -374,7 +379,9 @@ class SamplingResultsNode(Node):
         )["point_values"]
 
         return setting_result_tree_measurement(
+            self.expr.space,
             setting_result_tree,
+            self.expr.trials,
             self.measure_spec,
         )
 
@@ -438,8 +445,48 @@ def random_sampling_objective(spec):
         "status": "ok",
     }
 
+def tpe_estimated_minimum(space, trials):
+    hyperopt_trials = trials_from_docs(trials)
 
-def setting_result_measurements(setting_results, extra_measurements=None):
+    new_hparams = []
+    def capture_hparams(hp):
+        new_hparams.append(hp)
+        raise ValueError
+
+    try:
+        fmin(
+            capture_hparams,
+            space=[space],
+            algo=tpe.suggest,
+            trials=hyperopt_trials,
+            max_evals=len(hyperopt_trials) + 1,
+            show_progressbar=False,
+        )
+    except ValueError as e:
+        if not new_hparams:
+            raise e
+
+    return space_eval(
+        space,
+        unwrapped_settings(hyperopt_trials.trials[-1]["misc"]["vals"]),
+    )
+
+def tpe_estimated_setting_result(space, trials, point=None):
+    assert point in ("minimum", "maximum")
+    if point == "maximum":
+        trials = deepcopy(trials)
+        for trial in trials:
+            trial["result"]["loss"] = - trial["result"]["loss"]
+
+    return tpe_estimated_minimum(space, trials)
+
+
+def setting_result_measurements(
+        space,
+        setting_results,
+        trials,
+        extra_measurements=None,
+):
     results = [result for setting, result in setting_results]
     if isinstance(results[0], (int, float)):
         result_dist = np.array(results)
@@ -453,6 +500,20 @@ def setting_result_measurements(setting_results, extra_measurements=None):
 
         sorted_setting_results = setting_results
 
+    if space is not None and trials is not None:
+        model_argmin = tpe_estimated_setting_result(
+            space,
+            trials,
+            point="maximum",
+        )
+        model_argmax = tpe_estimated_setting_result(
+            space,
+            trials,
+            point="minimum",
+        )
+    else:
+        model_argmax = model_argmin = None
+
     return dict(**{
         "mean": result_dist.mean(),
         "std": result_dist.std(),
@@ -462,6 +523,8 @@ def setting_result_measurements(setting_results, extra_measurements=None):
         "argmin": sorted_setting_results[0][0],
         "argmax": sorted_setting_results[-1][0],
         "point_values": sorted_setting_results,
+        "model_argmin": model_argmin,
+        "model_argmax": model_argmax,
     }, **(extra_measurements or {})
     )
 
@@ -563,6 +626,11 @@ class SamplingNode(Node):
 
         self.params = params()
 
+        self.space = self.sampling_space
+        if self.strategy == "enumerate":
+            self.space = hp.choice(self.sampling_var, self.sampling_space)
+
+
     def load_session(self, ast_path):
         partial_session_name = experiment_partial_result(
             current_experiment(),
@@ -579,7 +647,8 @@ class SamplingNode(Node):
 
         session_name = unused_session_name(session_type=session_type)
 
-        search_space_spec = {
+        # Wrapped because hyperopt is weird.
+        search_space_spec = [{
             "func": self.func,
             "wrapped_params": ParamsWrapper(self.params),
             "sampling_var": self.sampling_var,
@@ -601,9 +670,7 @@ class SamplingNode(Node):
             session_name,
             objective=random_sampling_objective,
             algo=algo,
-            space=[
-                search_space_spec,
-            ], # Wrapped because hyperopt is weird.
+            space=search_space_spec,
             max_evals=self.sample_count,
 
             # Metadata.
@@ -691,7 +758,9 @@ class SamplingNode(Node):
         self.collect_results()
 
         return setting_result_measurements(
+            self.space,
             self.setting_results,
+            self.trials,
             extra_measurements={"session_name": self.session_name}
         )
 
@@ -704,22 +773,17 @@ class SamplingNode(Node):
             )["status"]
             assert status == "complete", status
 
-            sampling_space = self.sampling_space
-            if self.strategy == "enumerate":
-                sampling_space = hp.choice(
-                    self.sampling_var,
-                    sampling_space,
-                )
+            results = search_session_results(self.session_name)
 
             self.setting_results = [
                 (
-                    space_eval(sampling_space, setting),
+                    space_eval(self.space, setting),
                     results["result"],
                 )
-                for setting, results in (
-                        search_session_results(self.session_name)["setting_results"]
-                )
+                for setting, results in results["setting_results"]
             ]
+
+            self.trials = results["trials"]
 
             self.collected = True
 

@@ -10,6 +10,7 @@ from slurm_search.experiment import (
 )
 from slurm_search.experiments.all_tools import return_mean
 from slurm_search.experiments.display_tools import (
+    display_cdfs,
     display_setting_surface,
     display_setting_cdf_surface,
 )
@@ -32,10 +33,8 @@ def hp_tuning_effects():
 
     best_hp = space_samples["argmax:mean"]
     worst_hp = space_samples["argmin:mean"]
-    space_returns_mean_std = (
-        space_samples["mean:mean"],
-        space_samples["std:mean"],
-    )
+    model_best_hp = space_samples["model_argmax:mean"]
+    model_worst_hp = space_samples["model_argmin:mean"]
 
     best_hp_samples = use("hp", best_hp)[
         random_sampling(
@@ -57,31 +56,42 @@ def hp_tuning_effects():
         )
     ]
 
-    best_hp_returns_mean_std = best_hp_samples["mean"], best_hp_samples["std"]
-    worst_hp_returns_mean_std = worst_hp_samples["mean"], worst_hp_samples["std"]
+    model_best_hp_samples = use("hp", model_best_hp)[
+        random_sampling(
+            "run_seed",
+            return_mean("env", "agent", "hp", "run_params", "run_seed"),
+            sample_count="eval:run_samples",
+            method="search:method",
+            threads="eval:threads",
+        )
+    ]
 
-    best_hp_cdf = best_hp_samples["cdf"]
-    worst_hp_cdf = worst_hp_samples["cdf"]
-
-    space_hp_cdf = space_samples["point_values:cdf"]
-    space_hp_mean = space_samples["point_values:mean"]
-
+    model_worst_hp_samples = use("hp", model_worst_hp)[
+        random_sampling(
+            "run_seed",
+            return_mean("env", "agent", "hp", "run_params", "run_seed"),
+            sample_count="eval:run_samples",
+            method="search:method",
+            threads="eval:threads",
+        )
+    ]
 
     return {
-        "best_hp_samples": best_hp_samples,
         "best_hp": best_hp,
-        "best_hp_returns_mean_std": best_hp_returns_mean_std,
-        "best_hp_cdf": best_hp_cdf,
-
-        "space_hp_samples": space_samples,
-        "space_returns_mean_std": space_returns_mean_std,
-        "space_hp_cdf": space_hp_cdf,
-        "space_hp_mean": space_hp_mean,
-
-        "worst_hp_samples": worst_hp_samples,
         "worst_hp": worst_hp,
-        "worst_hp_returns_mean_std": worst_hp_returns_mean_std,
-        "worst_hp_cdf": worst_hp_cdf,
+        "model_best_hp": model_best_hp,
+        "model_worst_hp": model_worst_hp,
+
+        "best_hp_results": best_hp_samples,
+        "worst_hp_results": worst_hp_samples,
+        "model_best_hp_results": model_best_hp_samples,
+        "model_worst_hp_results": model_worst_hp_samples,
+
+        "space_returns_mean": space_samples["mean:mean"],
+        "space_returns_std": space_samples["std:mean"],
+        "space_returns_cdf": space_samples["cdf:mean"],
+        "space_hp_returns_mean": space_samples["point_values:mean"],
+        "space_hp_returns_cdf": space_samples["point_values:cdf"],
     }
 
 
@@ -122,17 +132,46 @@ hp_tuning_effects_debug_overrides = {
 
 def display_hp_tuning_effects(session_name, params, results):
     display_setting_surface(
-        results["space_hp_mean"],
+        results["space_hp_returns_mean"],
         setting_dims=["entropy_loss_scaling", "lr"],
         zlabel="Mean return",
         fig_name=f"{session_name}_setting_mean_return",
     )
 
     display_setting_cdf_surface(
-        results["space_hp_cdf"],
+        results["space_hp_returns_cdf"],
         zlabel="Return",
         fig_name=f"{session_name}_setting_percentile_return",
     )
+
+    for label, mean, std in (
+            ("model best", results["model_best_hp_results"]["mean"], results["model_best_hp_results"]["std"]),
+            ("trial best", results["best_hp_results"]["mean"], results["best_hp_results"]["std"]),
+            ("entire space", results["space_returns_mean"], results["space_returns_std"]),
+            ("trial worst", results["worst_hp_results"]["mean"], results["worst_hp_results"]["std"]),
+            ("model worst", results["model_worst_hp_results"]["mean"], results["model_worst_hp_results"]["std"]),
+    ):
+        print(f"Performance for {label}: {mean} +/- {std}")
+
+    label_cdfs = {
+        "space": results["space_returns_cdf"],
+
+        "trial_best": results["best_hp_results"]["cdf"],
+        "trial_worst": results["worst_hp_results"]["cdf"],
+
+        "model_best": results["model_best_hp_results"]["cdf"],
+        "model_worst": results["model_worst_hp_results"]["cdf"],
+    }
+
+    labels, cdfs = zip(*label_cdfs.items())
+
+    display_cdfs(
+        cdfs,
+        labels,
+        title="Performance CDFs of various HPs.",
+        fig_name=f"{session_name}_setting_cdfs",
+    )
+
 
 hp_tuning_effects_exp = {
     "config": hp_tuning_effects_config,
