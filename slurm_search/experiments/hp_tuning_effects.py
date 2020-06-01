@@ -4,6 +4,7 @@ from hyperopt import hp
 import numpy as np
 
 from slurm_search.experiment import (
+    maximizing_sampling,
     random_sampling,
     use,
 )
@@ -14,7 +15,7 @@ from slurm_search.experiments.display_tools import (
 )
 
 def hp_tuning_effects():
-    space_samples = random_sampling(
+    space_samples = maximizing_sampling(
         "hp",
         random_sampling(
             "run_seed",
@@ -23,6 +24,8 @@ def hp_tuning_effects():
             method="inline",
         ),
         sample_count="search:setting_samples",
+        maximize_measure="mean",
+
         method="search:method",
         threads="search:threads",
     )

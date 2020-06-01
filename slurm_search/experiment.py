@@ -24,7 +24,7 @@ from subprocess import Popen
 from time import sleep
 
 import numpy as np
-from hyperopt import hp, space_eval
+from hyperopt import fmin, hp, space_eval, tpe, trials_from_docs
 
 from slurm_search.params import (
     mapped_params,
@@ -416,9 +416,15 @@ def random_sampling_objective(spec):
                 ast_path=ast_path,
             )
 
+    # TODO: Replace these with func[spec[...]](ast_path=ast_path).
+    # For the moment we assume we only optimize on top of dictionary results,
+    # using same-layer measures. When we have fully functional resume, revisit
+    # this to allow for arbitrarily deep optimizations.
     loss_results = results
-    if spec["minimize_measure"]:
-        loss_results = func[spec["minimize_measure"]](ast_path=ast_path)
+    if spec.get("minimize_measure", None):
+        loss_results = results[spec["minimize_measure"]]
+    elif spec.get("maximize_measure", None):
+        loss_results = - results[spec["maximize_measure"]]
 
     # So you can return interesting data.
     if isinstance(loss_results, (int, float)):
@@ -489,6 +495,7 @@ class SamplingNode(Node):
             method=None,
             threads=None,
             minimize_measure=None,
+            maximize_measure=None,
     ):
 
         if isinstance(sampling_var_space, tuple):
@@ -508,7 +515,9 @@ class SamplingNode(Node):
             and isinstance(self.sampling_space, (list, tuple))):
             self.sample_count = len(self.sampling_space)
 
+        assert not (minimize_measure and maximize_measure)
         self.minimize_measure = minimize_measure
+        self.maximize_measure = maximize_measure
 
         self.method = method
         self.thread_count = threads
@@ -578,12 +587,14 @@ class SamplingNode(Node):
             "ast_path": ast_path,
             "experiment": current_experiment(),
             "minimize_measure": self.minimize_measure,
-        }
+            "maximize_measure": self.maximize_measure,
+        }]
 
         algo = {
             "enumerate": "enumeration",
             "randomize": "rand",
             "minimize": "tpe",
+            "maximize": "tpe",
         }[self.strategy]
 
         create_search_session(
@@ -735,6 +746,7 @@ class SamplingNode(Node):
             "enumerate": "enumeration_sampling",
             "randomize": "random_sampling",
             "minimize": "minimizing_sampling",
+            "maximize": "maximizing_sampling",
         }[self.strategy]
 
         func_str = self.func.abstract_expr_str(
@@ -776,3 +788,6 @@ def enumeration_sampling(*args, **kwargs):
 
 def minimizing_sampling(*args, **kwargs):
     return SamplingNode(*args, strategy="minimize", **kwargs)
+
+def maximizing_sampling(*args, **kwargs):
+    return SamplingNode(*args, strategy="maximize", **kwargs)
