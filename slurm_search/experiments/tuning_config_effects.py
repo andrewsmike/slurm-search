@@ -105,6 +105,13 @@ def display_tuning_config_effects(session_name, params, results):
     on search performance.
     """
 
+    # Show trial-noise / hp-noise ratios.
+    setting_trials = np.array([result["cdf"] for _, result in results])
+    hp_std = setting_trials.mean(axis=1).std()
+    trial_std = setting_trials.std(axis=1).mean()
+    print(f"[{session_name}] HP std / trial std: " +
+          f"{hp_std:0.3} / {trial_std:0.3} = {trial_std/hp_std:0.3}")
+
     # How we evaluate the results.
     setting_means = [
         (setting, result["mean"])

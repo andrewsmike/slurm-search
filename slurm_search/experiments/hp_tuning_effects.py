@@ -143,6 +143,17 @@ def display_hp_tuning_effects(session_name, params, results):
         fig_name=f"{session_name}_setting_cdfs",
     )
 
+    hp_cdfs = results["space_hp_returns_cdf"]
+    space_hp_cdfs = np.array([
+        cdf
+        for hp, cdf in hp_cdfs
+    ])
+
+    hp_std = space_hp_cdfs.mean(axis=1).std()
+    trial_std = space_hp_cdfs.std(axis=1).mean()
+    print(f"[{session_name}] Trial STD / HP std = {trial_std:0.3} / {hp_std:0.3} = {trial_std/hp_std:0.3}")
+
+
 
 hp_tuning_effects_exp = {
     "config": hp_tuning_effects_config,
