@@ -114,7 +114,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
         "array": f"0-{dev_thread_count - 1}",
         "ntasks": 1,
         "mem-per-cpu": 10,
-        "exclude": "node121",
+        "exclude": "node114,node121", # 114 is running really slow. 121 hits CUDA exceptions.
     }
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
@@ -242,10 +242,15 @@ def display_results_summary(session_name):
           f"Loss={worst_loss:.4}. Spec:")
     pprint(space_eval(space, worst_setting))
 
-def display_slurm_search_state(session_name):
+def display_slurm_search_state(session_name, key=None):
     with lock(session_name):
         state = session_state(session_name)
+
+    if key:
+        pprint(state[key])
+    else:
         pprint(state)
+
     if len(state.get("trials", [])) > 0:
         display_results_summary(
             session_name,
