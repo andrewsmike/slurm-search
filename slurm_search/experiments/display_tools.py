@@ -46,6 +46,7 @@ def display_surface(
         view_angle=160,
         show_points=False,
         product_contours=False,
+        contour_levels=None,
 
         fig_name=None,
         show=False,
@@ -119,14 +120,16 @@ def display_surface(
     fig_contour = plt.figure()
     ax_contour = fig_contour.gca()
 
+    contour_levels = contour_levels if contour_levels is not None else 8
+
     ax_contour.contour(
         X, Y, Z_w_nans,
-        levels=8,
+        levels=contour_levels,
         colors="k",
     )
     cntr1 = ax_contour.contourf(
         X, Y, Z_w_nans,
-        levels=8,
+        levels=contour_levels,
         cmap="RdBu_r",
     )
     fig_contour.colorbar(cntr1, ax=ax_contour)
@@ -164,6 +167,8 @@ def display_setting_surface(
         fig_name=None,
         show=False,
         product_contours=False,
+        contour_levels=None,
+        show_points=True,
 ):
     X_label, Y_label = setting_dims
 
@@ -183,9 +188,10 @@ def display_setting_surface(
         xlabel=X_label,
         ylabel=Y_label,
         zlabel=zlabel or "Result",
-        show_points=True,
+        show_points=show_points,
         view_angle=-140,
         product_contours=product_contours,
+        contour_levels=contour_levels,
 
         fig_name=fig_name,
         title=title,
