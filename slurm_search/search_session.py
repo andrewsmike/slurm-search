@@ -33,6 +33,7 @@ __all__ = [
     "disable_search_session",
     "enable_search_session",
     "next_search_trial",
+    "reset_active_search_trials",
     "search_session_objective",
     "search_session_active",
     "search_session_exists",
@@ -63,6 +64,29 @@ def next_enum_index(trials, var_name):
     return min(available_indices)
 
 def state_next_trial(state, worker_id):
+    resumable_tids = state.get("resumable_tids", [])
+
+    if not resumable_tids:
+        return state_next_novel_trial(state, worker_id)
+
+    next_state = dict(state)
+
+    next_tid = resumable_tids.pop()
+    next_state["resumable_tids"] = resumable_tids
+
+    next_state["trials"] = list(next_state["trials"])
+    next_trial = next_state["trials"][next_tid]
+
+    resume_hp = space_eval(
+        state["space"],
+        unwrapped_settings(next_trial["misc"]["vals"]),
+    )
+
+    next_trial["worker_id"] = worker_id
+
+    return (next_tid, resume_hp), next_state
+
+def state_next_novel_trial(state, worker_id):
     prev_trials = state['trials']
     hyperopt_trials = trials_from_docs(prev_trials)
 
@@ -138,11 +162,17 @@ def state_updated_with_results(state, trial_id, worker_id, hparams, results):
     next_state["trials"] = trials
     return next_state
 
+def completed_trails(search_state):
+    return sum(
+        trial["result"]["status"] == "ok"
+        for trial in search_state["trials"]
+    )
+
 def trials_exhausted(search_state):
     return (
-        len(search_state["trials"]) >= search_state.get("max_evals", 1e18)
+        completed_trials(search_state) >= search_state.get("max_evals", 1e3)
         or search_state["status"] != "active"
-        # TODO: Timeout.
+        # TODO: Search timeout?
     )
 
 def all_trials_complete(search_state):
@@ -172,6 +202,18 @@ def state_without_active_trials(search_state):
         trial_with_tid(trial, new_tid)
         for new_tid, trial in enumerate(search_state["trials"])
         if not trial_active(trial)
+    ]
+
+    return next_state
+
+
+def state_with_reset_active_trials(search_state):
+    next_state = dict(search_state)
+
+    next_state["resumable_tids"] = [
+        tid
+        for tid, trial in enumerate(search_state["trials"])
+        if trial_active(trial)
     ]
 
     return next_state
@@ -223,6 +265,14 @@ def update_search_results(session_name, trial_id, worker_id, hparams, results):
             state["status"] = "complete"
 
         update_session_state(session_name, state)
+
+def reset_active_search_trials(session_name):
+    with lock(session_name):
+        state = session_state(session_name)
+
+        reset_minimized_state = state_with_reset_active_trials(state)
+
+        update_session_state(session_name, reset_minimized_state)
 
 def delete_active_search_trials(session_name):
     with lock(session_name):

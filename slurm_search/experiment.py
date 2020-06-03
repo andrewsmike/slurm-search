@@ -39,8 +39,8 @@ from slurm_search.slurm_search import (
 )
 from slurm_search.search_session import (
     create_search_session,
-    delete_active_search_trials,
     next_search_trial,
+    reset_active_search_trials,
     search_session_names,
     search_session_progress,
     search_session_results,
@@ -637,7 +637,7 @@ class SamplingNode(Node):
             ast_path,
         )
         if partial_session_name:
-            delete_active_search_trials(partial_session_name)
+            reset_active_search_trials(partial_session_name)
             self.session_name = partial_session_name
         else:
             self.register_session(ast_path)
