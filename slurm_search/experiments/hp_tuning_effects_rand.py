@@ -15,8 +15,8 @@ from slurm_search.experiments.display_tools import (
     display_setting_cdf_surface,
 )
 
-def hp_tuning_effects():
-    space_samples = maximizing_sampling(
+def hp_tuning_effects_rand():
+    space_samples = random_sampling(
         "hp",
         random_sampling(
             "run_seed",
@@ -25,7 +25,6 @@ def hp_tuning_effects():
             method="inline",
         ),
         sample_count="search:setting_samples",
-        maximize_measure="mean",
 
         method="search:method",
         threads="search:threads",
@@ -69,7 +68,7 @@ def hp_tuning_effects():
     }
 
 
-hp_tuning_effects_config = {
+hp_tuning_effects_rand_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
 
@@ -99,12 +98,12 @@ hp_tuning_effects_config = {
     },
 }
 
-hp_tuning_effects_debug_overrides = {
+hp_tuning_effects_rand_debug_overrides = {
     "search": {"method": "inline"},
     "agent": "debug",
 }
 
-def display_hp_tuning_effects(session_name, params, results):
+def display_hp_tuning_effects_rand(session_name, params, results):
     display_setting_surface(
         results["space_hp_returns_mean"],
         setting_dims=["entropy_loss_scaling", "lr"],
@@ -143,10 +142,21 @@ def display_hp_tuning_effects(session_name, params, results):
         fig_name=f"{session_name}_setting_cdfs",
     )
 
+    hp_cdfs = results["space_hp_returns_cdf"]
+    space_hp_cdfs = np.array([
+        cdf
+        for hp, cdf in hp_cdfs
+    ])
 
-hp_tuning_effects_exp = {
-    "config": hp_tuning_effects_config,
-    "debug_overrides": hp_tuning_effects_debug_overrides,
-    "display_func": display_hp_tuning_effects,
-    "experiment_func": hp_tuning_effects,
+    hp_std = space_hp_cdfs.mean(axis=1).std()
+    trial_std = space_hp_cdfs.std(axis=1).mean()
+    print(f"[{session_name}] Trial STD / HP std = {trial_std:0.3} / {hp_std:0.3} = {trial_std/hp_std:0.3}")
+
+
+
+hp_tuning_effects_rand_exp = {
+    "config": hp_tuning_effects_rand_config,
+    "debug_overrides": hp_tuning_effects_rand_debug_overrides,
+    "display_func": display_hp_tuning_effects_rand,
+    "experiment_func": hp_tuning_effects_rand,
 }

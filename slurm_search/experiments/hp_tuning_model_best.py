@@ -15,7 +15,7 @@ from slurm_search.experiments.display_tools import (
     display_setting_cdf_surface,
 )
 
-def hp_tuning_effects():
+def hp_tuning_model_best():
     space_samples = maximizing_sampling(
         "hp",
         random_sampling(
@@ -33,6 +33,8 @@ def hp_tuning_effects():
 
     best_hp = space_samples["argmax:mean"]
     worst_hp = space_samples["argmin:mean"]
+    model_best_hp = space_samples["model_argmax:mean"]
+    model_worst_hp = space_samples["model_argmin:mean"]
 
     best_hp_samples = use("hp", best_hp)[
         random_sampling(
@@ -54,12 +56,36 @@ def hp_tuning_effects():
         )
     ]
 
+    model_best_hp_samples = use("hp", model_best_hp)[
+        random_sampling(
+            "run_seed",
+            return_mean("env", "agent", "hp", "run_params", "run_seed"),
+            sample_count="eval:run_samples",
+            method="search:method",
+            threads="eval:threads",
+        )
+    ]
+
+    model_worst_hp_samples = use("hp", model_worst_hp)[
+        random_sampling(
+            "run_seed",
+            return_mean("env", "agent", "hp", "run_params", "run_seed"),
+            sample_count="eval:run_samples",
+            method="search:method",
+            threads="eval:threads",
+        )
+    ]
+
     return {
         "best_hp": best_hp,
         "worst_hp": worst_hp,
+        "model_best_hp": model_best_hp,
+        "model_worst_hp": model_worst_hp,
 
         "best_hp_results": best_hp_samples,
         "worst_hp_results": worst_hp_samples,
+        "model_best_hp_results": model_best_hp_samples,
+        "model_worst_hp_results": model_worst_hp_samples,
 
         "space_returns_mean": space_samples["mean:mean"],
         "space_returns_std": space_samples["std:mean"],
@@ -69,7 +95,7 @@ def hp_tuning_effects():
     }
 
 
-hp_tuning_effects_config = {
+hp_tuning_model_best_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
 
@@ -99,12 +125,12 @@ hp_tuning_effects_config = {
     },
 }
 
-hp_tuning_effects_debug_overrides = {
+hp_tuning_model_best_debug_overrides = {
     "search": {"method": "inline"},
     "agent": "debug",
 }
 
-def display_hp_tuning_effects(session_name, params, results):
+def display_hp_tuning_model_best(session_name, params, results):
     display_setting_surface(
         results["space_hp_returns_mean"],
         setting_dims=["entropy_loss_scaling", "lr"],
@@ -112,26 +138,29 @@ def display_hp_tuning_effects(session_name, params, results):
         fig_name=f"{session_name}_setting_mean_return",
     )
 
-    try:
-        display_setting_cdf_surface(
-            results["space_hp_returns_cdf"],
-            zlabel="Return",
-            fig_name=f"{session_name}_setting_percentile_return",
-        )
-    except:
-        pass
+    display_setting_cdf_surface(
+        results["space_hp_returns_cdf"],
+        zlabel="Return",
+        fig_name=f"{session_name}_setting_percentile_return",
+    )
 
     for label, mean, std in (
+            ("model best", results["model_best_hp_results"]["mean"], results["model_best_hp_results"]["std"]),
             ("trial best", results["best_hp_results"]["mean"], results["best_hp_results"]["std"]),
             ("entire space", results["space_returns_mean"], results["space_returns_std"]),
             ("trial worst", results["worst_hp_results"]["mean"], results["worst_hp_results"]["std"]),
+            ("model worst", results["model_worst_hp_results"]["mean"], results["model_worst_hp_results"]["std"]),
     ):
         print(f"Performance for {label}: {mean} +/- {std}")
 
     label_cdfs = {
         "space": results["space_returns_cdf"],
+
         "trial_best": results["best_hp_results"]["cdf"],
         "trial_worst": results["worst_hp_results"]["cdf"],
+
+        "model_best": results["model_best_hp_results"]["cdf"],
+        "model_worst": results["model_worst_hp_results"]["cdf"],
     }
 
     labels, cdfs = zip(*label_cdfs.items())
@@ -144,9 +173,9 @@ def display_hp_tuning_effects(session_name, params, results):
     )
 
 
-hp_tuning_effects_exp = {
-    "config": hp_tuning_effects_config,
-    "debug_overrides": hp_tuning_effects_debug_overrides,
-    "display_func": display_hp_tuning_effects,
-    "experiment_func": hp_tuning_effects,
+hp_tuning_model_best_exp = {
+    "config": hp_tuning_model_best_config,
+    "debug_overrides": hp_tuning_model_best_debug_overrides,
+    "display_func": display_hp_tuning_model_best,
+    "experiment_func": hp_tuning_model_best,
 }
