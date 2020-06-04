@@ -162,7 +162,7 @@ def state_updated_with_results(state, trial_id, worker_id, hparams, results):
     next_state["trials"] = trials
     return next_state
 
-def completed_trails(search_state):
+def completed_trials(search_state):
     return sum(
         trial["result"]["status"] == "ok"
         for trial in search_state["trials"]

@@ -19,9 +19,9 @@ from slurm_search.objectives import (
 from slurm_search.random_phrase import random_phrase
 from slurm_search.search_session import (
     create_search_session,
-    delete_active_search_trials,
     disable_search_session,
     enable_search_session,
+    reset_active_search_trials,
     search_session_names,
     search_session_objective,
     search_session_progress,
@@ -156,7 +156,7 @@ def start_slurm_search(search_type, *args):
 
 
 def restart_slurm_search(session_name):
-    delete_active_search_trials(session_name)
+    reset_active_search_trials(session_name)
     enable_search_session(session_name)
     launch_slurm_search_workers(session_name, iteration=1)
 
@@ -336,8 +336,8 @@ def slurm_worker_id():
     return f"{job_id}_{slurm_array_task_index() or 0}_{getpid()}"
 
 def launch_next_generation(session_name, iteration, thread_count=None):
-    print("Clearing incomplete trials...")
-    delete_active_search_trials(session_name)
+    print("Resetting incomplete trials...")
+    reset_active_search_trials(session_name)
 
     print("Spawning the next generation...")
     launch_slurm_search_workers(
