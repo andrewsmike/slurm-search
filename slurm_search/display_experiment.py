@@ -77,6 +77,7 @@ def display_experiment():
         return
 
     session_name, results = run_experiment(
+        exp_name,
         exp_spec["experiment_func"],
         exp_spec["config"],
         overrides,
