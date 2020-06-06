@@ -20,6 +20,7 @@ from datetime import datetime
 from copy import deepcopy
 from functools import wraps
 from inspect import signature
+from pprint import pprint
 from subprocess import Popen
 from time import sleep
 
@@ -27,6 +28,7 @@ import numpy as np
 from hyperopt import fmin, hp, space_eval, tpe, trials_from_docs
 
 from slurm_search.params import (
+    flattened_params,
     mapped_params,
     unflattened_params,
     unwrapped_settings,
@@ -205,11 +207,12 @@ def run_experiment(name, func, defaults, overrides, resume=None):
             args_str = " ".join([
                 f"--{key}={value}"
                 for key, value in flattened_params(
-                        experiment_override_params(session_name).items(),
+                        experiment_override_params(session_name),
                         delim=":"
-                )
+                ).items()
             ])
             print(f"run_exp {name} {args_str} --resume={session_name}")
+            raise ValueError("Bad arguments")
     else:
         session_name = create_experiment(func, defaults, overrides)
 
