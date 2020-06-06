@@ -86,6 +86,10 @@ def experiment_params(session_name):
     with lock(session_name):
         return session_state(session_name)["params"]
 
+def experiment_override_params(session_name):
+    with lock(session_name):
+        return session_state(session_name)["override_params"]
+
 def update_experiment_results(session_name, results):
     with lock(session_name):
         experiment_state = session_state(session_name)
@@ -179,7 +183,7 @@ def nodes_evaluated(nodes_dict):
         nodes_dict,
     )
 
-def run_experiment(func, defaults, overrides, resume=None):
+def run_experiment(name, func, defaults, overrides, resume=None):
 
     params = updated_params(defaults, overrides)
 
@@ -190,10 +194,22 @@ def run_experiment(func, defaults, overrides, resume=None):
 
         resume_params = experiment_params(session_name)
 
-        assert params_equal(resume_params, params), (
-            "Attempted to reload an experiment with the wrong parameters."
-        )
+        if not params_equal(resume_params, params):
+            print(
+                "Attempted to reload an experiment with the wrong parameters."
+            )
+            print("Correct parameters:")
+            pprint(resume_params)
 
+            print("Command line:")
+            args_str = " ".join([
+                f"--{key}={value}"
+                for key, value in flattened_params(
+                        experiment_override_params(session_name).items(),
+                        delim=":"
+                )
+            ])
+            print(f"run_exp {name} {args_str} --resume={session_name}")
     else:
         session_name = create_experiment(func, defaults, overrides)
 
