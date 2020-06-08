@@ -380,7 +380,7 @@ def wait_on_slurm_search(session_name, iteration):
 def generational_work_on_slurm_search(
         session_name,
         timeout=3 * HOUR + 30 * MINUTE,
-        max_iters=5,
+        max_iters=24,
 ):
     iteration = slurm_iteration()
     assert iteration, "This command must be run from within a slurm worker."
