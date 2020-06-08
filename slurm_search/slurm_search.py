@@ -22,6 +22,7 @@ from slurm_search.search_session import (
     disable_search_session,
     enable_search_session,
     reset_active_search_trials,
+    search_session_interruptable,
     search_session_names,
     search_session_objective,
     search_session_progress,
@@ -282,22 +283,38 @@ def display_search_session_logs(session_name):
     run(["tail", "-n", "+1"] + log_files)
 
 
-def work_on_slurm_search(session_name):
+def work_on_slurm_search(session_name, timeout=None):
     """
     Work on a particular search.
     """
+    timeout = int(timeout) if timeout is not None else None
+
+    # Let children searches check when the deadline is so they don't start
+    # anything interruptable that they can't finish.
+    if timeout:
+        set_slurm_timeout(int(timeout))
+
     # Objective is a pickled reference to a function.
     # It must be available to pickle during load()ing.
     objective = search_session_objective(session_name)
 
+    interruptable = search_session_interruptable(session_name)
+
     worker_id = slurm_worker_id()
 
     try:
-        while True:
+        durations = []
+        enough_time_for_another = True
+        while enough_time_for_another:
+
+            start_time = time()
+
             print(f"[{session_name}] Getting next trial.", flush=True)
             trial_id, trial_hparams = next_search_trial(session_name, worker_id)
+
             print(f"[{session_name}] Next trial: {trial_id}:{trial_hparams}.", flush=True)
             results = objective(trial_hparams)
+
             print(f"[{session_name}] Writing back results: " +
                   f"{trial_id}:{trial_hparams} => {results['loss']}.", flush=True)
             update_search_results(
@@ -307,7 +324,16 @@ def work_on_slurm_search(session_name):
                 trial_hparams,
                 results,
             )
+
             print(f"[{session_name}] Results recorded.", flush=True)
+
+            durations.append(time() - start_time)
+
+            if timeout and not interruptable:
+                remaining_time = timeout - sum(durations)
+                avg_duration = sum(durations) / len(durations)
+                enough_time_for_another = avg_duration < remaining_time
+
     except ValueError as e:
         print(f"Hit exception: {e}")
 
@@ -367,6 +393,19 @@ def slurm_iteration_remaining_time(session_name, iteration):
     current_time = time()
     return state["slurm_iteration_end_time"] - current_time
 
+_slurm_end_time = None
+
+def set_slurm_end_time(end_time):
+    global _slurm_end_time = end_time
+
+def slurm_iteration_timeout():
+    global _slurm_end_time
+    if _slurm_end_time is None:
+        return None
+
+    return _slurm_end_time - time()
+
+
 def wait_on_slurm_search(session_name, iteration):
     remaining_time = slurm_iteration_remaining_time(session_name, iteration)
     search_active = (search_session_progress(session_name)["status"] == "active")
@@ -400,7 +439,7 @@ def generational_work_on_slurm_search(
     search_complete = True
     try:
         run(
-            ["ssearch", "work_on", session_name],
+            ["ssearch", "work_on", session_name, str(timeout)],
             timeout=timeout,
         )
     except TimeoutExpired as e:

@@ -22,7 +22,9 @@ from functools import wraps
 from inspect import signature
 from pprint import pprint
 from subprocess import Popen
-from time import sleep
+from threading import get_ident
+from time import sleep, time
+from os import getpid
 
 import numpy as np
 from hyperopt import fmin, hp, space_eval, tpe, trials_from_docs
@@ -38,6 +40,7 @@ from slurm_search.params import (
 )
 from slurm_search.slurm_search import (
     launch_slurm_search_workers,
+    slurm_iteration_timeout,
 )
 from slurm_search.search_session import (
     create_search_session,
@@ -247,7 +250,14 @@ def experiment_details(func, defaults, overrides, abstract=False):
 ## I accidentally an AST
 
 class Node(object):
-    pass
+    def __call__(self, ast_path):
+        raise NotImplementedError
+    def __str__(self):
+        raise NotImplementedError
+    def abstract_expr_str(self, measure_parts=None):
+        raise NotImplementedError
+    def interruptable(self):
+        return False
 
 class CallNode(Node):
     def __init__(self, wrapper, args, kwargs):
@@ -607,6 +617,9 @@ class SamplingNode(Node):
         self.launched = False
         self.collected = False
 
+    def interruptable(self):
+        return True
+
     def launch(self, ast_path=None):
         if not self.launched:
             self.bind_params()
@@ -697,6 +710,8 @@ class SamplingNode(Node):
             sampling_var=self.sampling_var,
             sampling_space=self.sampling_space,
             strategy=self.strategy,
+
+            interruptable=self.func.interruptable(),
         )
 
         # Register so we know how to resume
@@ -709,9 +724,23 @@ class SamplingNode(Node):
         self.session_name = session_name
 
     def run_inline(self):
+        timeout = slurm_iteration_timeout()
         try:
+            durations = []
             while True:
-                self.sample_once(worker_id="cpu0")
+                start_time = time()
+
+                pid, tid = getpid(), get_ident()
+                self.sample_once(worker_id=f"cpu{pid}_{tid}")
+
+                durations.append(time() - start_time)
+
+                if timeout and not self.func.interruptable():
+                    remaining_time = timeout - sum(durations)
+                    avg_duration = sum(durations) / len(durations)
+                    if avg_duration < remaining_time:
+                        raise TimeoutError("Cannot complete next trial before timeout.")
+
         except ValueError as e:
             assert str(e) == "No more trials to run."
 

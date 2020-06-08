@@ -34,10 +34,11 @@ __all__ = [
     "enable_search_session",
     "next_search_trial",
     "reset_active_search_trials",
-    "search_session_objective",
+    "search_session_interruptable",
     "search_session_active",
     "search_session_exists",
     "search_session_names",
+    "search_session_objective",
     "search_session_progress",
     "search_session_results",
     "update_search_results",
@@ -227,6 +228,12 @@ def search_session_objective(session_name):
     with lock(session_name):
         state = session_state(session_name)
         return state["objective"]
+
+# Search / trial interactions.
+def search_session_interruptable(session_name):
+    with lock(session_name):
+        state = session_state(session_name)
+        return state.get("interruptable", False)
 
 def next_search_trial(session_name, worker_id):
     """
