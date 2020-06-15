@@ -9,13 +9,22 @@ __all__ = [
 from os.path import exists, join
 from random import choice
 
-def random_phrase():
-    return "_".join([
-        choice(adjectives),
-        choice(adjectives),
-        choice(adjectives),
-        choice(nouns),
-    ])
+def random_phrase(short=False):
+    if short:
+        words = [
+            choice(adjectives),
+            choice(adjectives),
+            choice(nouns),
+        ]
+    else:
+        words = [
+            choice(adjectives),
+            choice(adjectives),
+            choice(adjectives),
+            choice(nouns),
+        ]
+
+    return "_".join(words)
 
 def random_file_name(path):
     phrase = random_phrase()

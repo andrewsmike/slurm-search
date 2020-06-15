@@ -370,7 +370,9 @@ def search_session_names(
 
 
 def unused_session_name(session_type):
-    session_name =  session_type + ":" + random_phrase()
+    short_name = session_type in {"exp"}
+
+    session_name =  session_type + ":" + random_phrase(short=short_name)
     while search_session_exists(session_name):
         session_name = session_type + ":" + random_phrase()
 
