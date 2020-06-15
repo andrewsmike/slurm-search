@@ -8,6 +8,7 @@ from os.path import expanduser, join
 from pprint import pprint
 from subprocess import check_output, Popen, run, TimeoutExpired
 from sys import argv, exit
+from threading import get_ident
 from time import sleep, time
 
 from slurm_search.locking import lock
@@ -229,18 +230,18 @@ def display_results_summary(session_name):
         loss
         for setting, loss in setting_losses
     ])
-    print(f"[{session_name}] Loss dist: {min(losses):.4} <= {losses.mean():.4} " +
-          f"+/- {losses.std():.4} <= {max(losses):.4}")
+    print(f"[{session_name}] Loss dist: {float(min(losses)):.4} <= {float(losses.mean()):.4} " +
+          f"+/- {float(losses.std()):.4} <= {float(max(losses)):.4}")
 
 
     best_setting, best_loss = min(setting_losses, key=lambda trial: trial[1])
     print(f"[{session_name}] Best setting: {best_setting} => " +
-          f"Loss={best_loss:.4}. Spec:")
+          f"Loss={float(best_loss):.4}. Spec:")
     pprint(space_eval(space, best_setting))
 
     worst_setting, worst_loss = max(setting_losses, key=lambda trial: trial[1])
     print(f"[{session_name}] Worst setting: {worst_setting} => " +
-          f"Loss={worst_loss:.4}. Spec:")
+          f"Loss={float(worst_loss):.4}. Spec:")
     pprint(space_eval(space, worst_setting))
 
 def display_slurm_search_state(session_name, key=None):
@@ -363,7 +364,9 @@ def slurm_array_task_count():
 
 def slurm_worker_id():
     job_id = getenv("SLURM_JOB_ID", "UNKNOWN")
-    return f"{job_id}_{slurm_array_task_index() or 0}_{getpid()}"
+    task_index = slurm_array_task_index() or 0
+    pid, tid = getpid(), get_ident()
+    return f"{job_id}_{task_index}_{pid}_{tid}"
 
 def launch_next_generation(session_name, iteration, thread_count=None):
     print("Resetting incomplete trials...")

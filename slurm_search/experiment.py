@@ -22,7 +22,6 @@ from functools import wraps
 from inspect import signature
 from pprint import pprint
 from subprocess import Popen
-from threading import get_ident
 from time import sleep, time
 from os import getpid
 
@@ -41,6 +40,7 @@ from slurm_search.params import (
 from slurm_search.slurm_search import (
     launch_slurm_search_workers,
     slurm_iteration_timeout,
+    slurm_worker_id,
 )
 from slurm_search.search_session import (
     create_search_session,
@@ -726,12 +726,12 @@ class SamplingNode(Node):
     def run_inline(self):
         timeout = slurm_iteration_timeout()
         try:
+
             durations = []
             while True:
                 start_time = time()
 
-                pid, tid = getpid(), get_ident()
-                self.sample_once(worker_id=f"cpu{pid}_{tid}")
+                self.sample_once()
 
                 durations.append(time() - start_time)
 
@@ -744,7 +744,9 @@ class SamplingNode(Node):
         except ValueError as e:
             assert str(e) == "No more trials to run."
 
-    def sample_once(self, worker_id):
+    def sample_once(self):
+        worker_id = slurm_worker_id()
+
         trial_id, next_sample = (
             next_search_trial(self.session_name, worker_id)
         )
