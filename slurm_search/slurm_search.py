@@ -6,7 +6,7 @@ import logging
 from os import getenv, getpid, makedirs
 from os.path import expanduser, join
 from pprint import pprint
-from subprocess import Popen, run, TimeoutExpired
+from subprocess import check_output, Popen, run, TimeoutExpired
 from sys import argv, exit
 from time import sleep, time
 
@@ -304,8 +304,7 @@ def work_on_slurm_search(session_name, timeout=None):
 
     try:
         durations = []
-        enough_time_for_another = True
-        while enough_time_for_another:
+        while True:
 
             start_time = time()
 
@@ -332,13 +331,18 @@ def work_on_slurm_search(session_name, timeout=None):
             if timeout and not interruptable:
                 remaining_time = timeout - sum(durations)
                 avg_duration = sum(durations) / len(durations)
-                enough_time_for_another = avg_duration < remaining_time
+                if avg_duration < remaining_time:
+                    return -1
 
     except ValueError as e:
         print(f"Hit exception: {e}")
+        return 0
+
+def user():
+    return getenv("user")
 
 def slurm_iteration():
-    slurm_job_name = getenv("SLURM_JOB_NAME", None)
+    slurm_job_name = getenv("SLURM_JOB_NAME")
     if slurm_job_name:
         return int(slurm_job_name.split("_")[-1])
     else:
@@ -405,13 +409,23 @@ def slurm_iteration_timeout():
 
     return _slurm_end_time - time()
 
+def slurm_iteration_workers(session_name, iteration):
+    job_name = slurm_job_name(session_name, iteration=iteration)
+    job_id_strs = check_output(
+        ["squeue", "-n", job_name, "-u", user(), "-o", "%A", "-h"]
+    ).decode().split("\n")
+
+    return {int(job_id_str) for job_id_str in job_id_strs if job_id_str}
 
 def wait_on_slurm_search(session_name, iteration):
-    remaining_time = slurm_iteration_remaining_time(session_name, iteration)
     search_active = (search_session_progress(session_name)["status"] == "active")
-    while (remaining_time > 0) and not search_active:
-        remaining_time = slurm_iteration_remaining_time(session_name, iteration)
+    remaining_workers = len(slurm_iteration_workers(session_name, iteration)) > 1
+    remaining_time = slurm_iteration_remaining_time(session_name, iteration) # Unnecessary
+
+    while search_active and remaining_workers and (remaining_time > 0):
         search_active = (search_session_progress(session_name)["status"] == "active")
+        remaining_workers = slurm_iteration_workers(session_name, iteration)
+        remaining_time = slurm_iteration_remaining_time(session_name, iteration)
         sleep(1 * MINUTE)
 
     return not search_active
@@ -438,7 +452,7 @@ def generational_work_on_slurm_search(
 
     search_complete = True
     try:
-        run(
+        error_code = run(
             ["ssearch", "work_on", session_name, str(timeout)],
             timeout=timeout,
         )
@@ -448,6 +462,9 @@ def generational_work_on_slurm_search(
     except Exception as e:
         print(f"Search hit {type(e)} exception: '{e}'")
         raise
+
+    if error_code:
+        search_complete = False
 
     if search_complete:
         print("Search completed. Exiting.")

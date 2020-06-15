@@ -163,21 +163,17 @@ def state_updated_with_results(state, trial_id, worker_id, hparams, results):
     next_state["trials"] = trials
     return next_state
 
+def trials_exhausted(search_state):
+    """
+    Have we launched (or relaunched) enough trials to complete the search?
+    """
+    resumable_trials = len(state["resumable_tids"])
+    active_trials = len(state["trials"])
+    max_trials = search_state.get("max_evals", 128)
+    return max_trials <= (active_trials - resumable_trials)
+
 def completed_trials(search_state):
     return sum(
-        trial["result"]["status"] == "ok"
-        for trial in search_state["trials"]
-    )
-
-def trials_exhausted(search_state):
-    return (
-        completed_trials(search_state) >= search_state.get("max_evals", 1e3)
-        or search_state["status"] != "active"
-        # TODO: Search timeout?
-    )
-
-def all_trials_complete(search_state):
-    return all(
         trial["result"]["status"] == "ok"
         for trial in search_state["trials"]
     )
@@ -238,11 +234,14 @@ def search_session_interruptable(session_name):
 def next_search_trial(session_name, worker_id):
     """
     Atomically decide the next hparam values and progress the session state.
+
+    :raises: If the search has no remaining (unclaimed) trials.
     """
     with lock(session_name):
         state = session_state(session_name)
 
-        if trials_exhausted(state):
+        search_inactive = state["status"] != "active"
+        if trials_exhausted(state) or search_inactive:
             raise ValueError(
                 "No more trials to run."
             )
@@ -268,7 +267,8 @@ def update_search_results(session_name, trial_id, worker_id, hparams, results):
             results,
         )
 
-        if trials_exhausted(state) and all_trials_complete(state):
+        max_trials = state.get("max_evals", 128)
+        if completed_trials(search_state) >= max_trials:
             state["status"] = "complete"
 
         update_session_state(session_name, state)
@@ -295,11 +295,6 @@ def search_session_exists(session_name):
         return session_state_exists(session_name)
 
 def search_session_active(session_name):
-    """
-    An active search session does not have all its results yet.
-    It may have exhausted its trials, and be waiting on workers.
-    Its workers may have been killed anomalously.
-    """
     with lock(session_name):
         try:
             state = session_state(session_name)
