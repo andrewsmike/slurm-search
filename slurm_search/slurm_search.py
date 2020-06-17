@@ -288,12 +288,15 @@ def work_on_slurm_search(session_name, timeout=None):
     """
     Work on a particular search.
     """
-    timeout = int(timeout) if timeout is not None else None
+    timeout = float(timeout) if timeout is not None else None
+    start_time = time()
 
     # Let children searches check when the deadline is so they don't start
-    # anything interruptable that they can't finish.
+    # anything uninterruptable that they can't finish.
     if timeout:
-        set_slurm_timeout(int(timeout))
+        deadline = start_time + float(timeout)
+        print(f"Setting deadline: {start_time} + {timeout} = {deadline}.")
+        set_slurm_deadline(deadline)
 
     # Objective is a pickled reference to a function.
     # It must be available to pickle during load()ing.
@@ -329,18 +332,23 @@ def work_on_slurm_search(session_name, timeout=None):
 
             durations.append(time() - start_time)
 
+            print("Durations: " + str(durations))
             if timeout and not interruptable:
-                remaining_time = timeout - sum(durations)
+                remaining_time = deadline - time()
                 avg_duration = sum(durations) / len(durations)
+                print(f"Avg duration, remaining time: {avg_duration}, {remaining_time}")
                 if avg_duration < remaining_time:
                     return -1
 
+    except TimeoutError as e:
+        print("Got timeout error. Letting search continue.")
+        return -1
     except ValueError as e:
         print(f"Hit exception: {e}")
         return 0
 
 def user():
-    return getenv("user")
+    return getenv("USER")
 
 def slurm_iteration():
     slurm_job_name = getenv("SLURM_JOB_NAME")
@@ -400,17 +408,18 @@ def slurm_iteration_remaining_time(session_name, iteration):
     current_time = time()
     return state["slurm_iteration_end_time"] - current_time
 
-_slurm_end_time = None
+_slurm_deadline = None
 
-def set_slurm_end_time(end_time):
-    global _slurm_end_time = end_time
+def set_slurm_deadline(deadline):
+    global _slurm_deadline
+    _slurm_deadline = deadline
 
-def slurm_iteration_timeout():
-    global _slurm_end_time
-    if _slurm_end_time is None:
+def slurm_iteration_deadline():
+    global _slurm_deadline
+    if _slurm_deadline is None:
         return None
 
-    return _slurm_end_time - time()
+    return _slurm_deadline
 
 def slurm_iteration_workers(session_name, iteration):
     job_name = slurm_job_name(session_name, iteration=iteration)
@@ -426,6 +435,7 @@ def wait_on_slurm_search(session_name, iteration):
     remaining_time = slurm_iteration_remaining_time(session_name, iteration) # Unnecessary
 
     while search_active and remaining_workers and (remaining_time > 0):
+        print(f"Waiting on workers. Remaining time: {remaining_time}")
         search_active = (search_session_progress(session_name)["status"] == "active")
         remaining_workers = slurm_iteration_workers(session_name, iteration)
         remaining_time = slurm_iteration_remaining_time(session_name, iteration)
@@ -435,7 +445,7 @@ def wait_on_slurm_search(session_name, iteration):
 
 def generational_work_on_slurm_search(
         session_name,
-        timeout=3 * HOUR + 30 * MINUTE,
+        timeout=3 * HOUR + 40 * MINUTE,
         max_iters=24,
 ):
     iteration = slurm_iteration()
@@ -455,10 +465,14 @@ def generational_work_on_slurm_search(
 
     search_complete = True
     try:
-        error_code = run(
+        return_code = run(
             ["ssearch", "work_on", session_name, str(timeout)],
             timeout=timeout,
         )
+        if return_code != 0:
+            print("Search returned non-zero error code.")
+            search_complete = False
+
     except TimeoutExpired as e:
         search_complete = False
         print("Search timed out.")
@@ -466,8 +480,6 @@ def generational_work_on_slurm_search(
         print(f"Search hit {type(e)} exception: '{e}'")
         raise
 
-    if error_code:
-        search_complete = False
 
     if search_complete:
         print("Search completed. Exiting.")

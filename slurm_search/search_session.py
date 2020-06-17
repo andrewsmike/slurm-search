@@ -167,8 +167,8 @@ def trials_exhausted(search_state):
     """
     Have we launched (or relaunched) enough trials to complete the search?
     """
-    resumable_trials = len(state["resumable_tids"])
-    active_trials = len(state["trials"])
+    resumable_trials = len(search_state.get("resumable_tids", []))
+    active_trials = len(search_state["trials"])
     max_trials = search_state.get("max_evals", 128)
     return max_trials <= (active_trials - resumable_trials)
 
@@ -268,7 +268,7 @@ def update_search_results(session_name, trial_id, worker_id, hparams, results):
         )
 
         max_trials = state.get("max_evals", 128)
-        if completed_trials(search_state) >= max_trials:
+        if completed_trials(state) >= max_trials:
             state["status"] = "complete"
 
         update_session_state(session_name, state)

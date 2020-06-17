@@ -39,7 +39,7 @@ from slurm_search.params import (
 )
 from slurm_search.slurm_search import (
     launch_slurm_search_workers,
-    slurm_iteration_timeout,
+    slurm_iteration_deadline,
     slurm_worker_id,
 )
 from slurm_search.search_session import (
@@ -724,9 +724,8 @@ class SamplingNode(Node):
         self.session_name = session_name
 
     def run_inline(self):
-        timeout = slurm_iteration_timeout()
+        deadline = slurm_iteration_deadline()
         try:
-
             durations = []
             while True:
                 start_time = time()
@@ -734,11 +733,14 @@ class SamplingNode(Node):
                 self.sample_once()
 
                 durations.append(time() - start_time)
-
-                if timeout and not self.func.interruptable():
-                    remaining_time = timeout - sum(durations)
+                if deadline and not self.func.interruptable():
+                    print(f"[{self.session_name}] Durations: {durations}")
                     avg_duration = sum(durations) / len(durations)
-                    if avg_duration < remaining_time:
+                    remaining_time = deadline - time()
+                    print("Deadline, avg duration, remaining time: " +
+                          f"{deadline}, {avg_duration}, {remaining_time}", flush=True)
+
+                    if avg_duration > remaining_time:
                         raise TimeoutError("Cannot complete next trial before timeout.")
 
         except ValueError as e:
@@ -747,12 +749,16 @@ class SamplingNode(Node):
     def sample_once(self):
         worker_id = slurm_worker_id()
 
+        print(f"[{self.session_name}] Getting next trial...", flush=True)
         trial_id, next_sample = (
             next_search_trial(self.session_name, worker_id)
         )
 
+        print(f"[{self.session_name}] Next trial: {trial_id}:{next_sample}.", flush=True)
         results = random_sampling_objective(next_sample)
 
+        print(f"[{self.session_name}] Writing back results: " +
+              f"{trial_id}:{next_sample} => {results['loss']}.", flush=True)
         update_search_results(
             self.session_name,
             trial_id,
@@ -760,6 +766,8 @@ class SamplingNode(Node):
             next_sample,
             results,
         )
+
+        print(f"[{self.session_name}] Results recorded.", flush=True)
 
     def launch_cpu(self):
         worker_command = ["ssearch", "work_on", self.session_name]
