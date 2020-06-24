@@ -17,7 +17,12 @@ from slurm_search.experiments.display_tools import (
 
 def compare_hp_spaces():
     space_results = {}
-    for hp_space_name in ["loguniform_hp_space"]:
+    for hp_space_name in [
+            "loguniform_hp_space",
+            "lognormal_hp_space",
+            "lognormal_smaller_hp_space",
+            "lognormal_smallerer_hp_space",
+    ]:
         space_samples = maximizing_sampling(
             ("hp", hp_space_name),
              random_sampling(
@@ -68,9 +73,37 @@ compare_hp_spaces_config = {
         "clip_grad": hp.loguniform("clip_grad", log(0.1), log(1)),
         "lr": hp.loguniform("lr", log(1e-4), log(1e-2)),
         "entropy_loss_scaling": hp.uniform("els", 0, 0.1),
-        "value_loss_scaling": hp.uniform("vls", 0.2, 1.2),
+        #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
         "n_envs": hp.qloguniform("n_envs", log(1), log(32), 1),
         "n_steps": hp.qloguniform("n_steps", log(1), log(16), 1),
+    },
+
+    # Set 3std ~= min or max
+    "lognormal_hp_space": {
+        "clip_grad": hp.normal("clip_grad", 0.4, 0.1),
+        "lr": hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3),
+        "entropy_loss_scaling": hp.normal("els", 0.06, 0.01), # Must not go neg
+        #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
+        "n_envs": hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1),
+        "n_steps": hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1),
+    },
+
+    "lognormal_smaller_hp_space": {
+        "clip_grad": hp.normal("clip_grad", 0.15, 0.04),
+        "lr": hp.lognormal("lr", log(7e-4), (log(7e-4) - log(1e-4))/6),
+        "entropy_loss_scaling": hp.normal("els", 0.03, 0.008), # Must not go neg
+        #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
+        "n_envs": hp.qlognormal("n_envs", log(32), log(32)/8, 1),
+        "n_steps": hp.qlognormal("n_steps", log(5), log(5)/6, 1),
+    },
+
+    "lognormal_smallerer_hp_space": {
+        "clip_grad": hp.normal("clip_grad", 0.12, 0.02),
+        "lr": hp.lognormal("lr", log(7e-4), (log(7e-4) - log(1e-4))/12),
+        "entropy_loss_scaling": hp.normal("els", 0.03, 0.004), # Must not go neg
+        #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
+        "n_envs": hp.qlognormal("n_envs", log(32), log(32)/16, 1),
+        "n_steps": hp.qlognormal("n_steps", log(5), log(5)/8, 1),
     },
 
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
@@ -102,7 +135,7 @@ compare_hp_spaces_debug_overrides = {
 def display_compare_hp_spaces(session_name, params, results):
     for space_name, space_results in results.items():
         display_setting_surface(
-            results["space_hp_returns_mean"],
+            space_results["space_hp_returns_mean"],
             setting_dims=["entropy_loss_scaling", "lr"],
             zlabel="Mean return",
             fig_name=f"{session_name}_{space_name}setting_mean_return",
@@ -110,7 +143,7 @@ def display_compare_hp_spaces(session_name, params, results):
 
         try:
             display_setting_cdf_surface(
-                results["space_hp_returns_cdf"],
+                space_results["space_hp_returns_cdf"],
                 zlabel="Return {space_name}",
                 fig_name=f"{session_name}_{space_name}_setting_percentile_return",
             )
@@ -118,14 +151,14 @@ def display_compare_hp_spaces(session_name, params, results):
             pass
 
         for label, mean, std in (
-                ("trial best", results["best_hp_results"]["mean"], results["best_hp_results"]["std"]),
-                ("entire space", results["space_returns_mean"], results["space_returns_std"]),
+                ("trial best", space_results["best_hp_results"]["mean"], space_results["best_hp_results"]["std"]),
+                ("entire space", space_results["space_returns_mean"], space_results["space_returns_std"]),
         ):
             print(f"{space_name} performance for {label}: {mean} +/- {std}")
 
         label_cdfs = {
-            "space": results["space_returns_cdf"],
-            "trial_best": results["best_hp_results"]["cdf"],
+            "space": space_results["space_returns_cdf"],
+            "trial_best": space_results["best_hp_results"]["cdf"],
         }
 
         labels, cdfs = zip(*label_cdfs.items())
@@ -137,7 +170,7 @@ def display_compare_hp_spaces(session_name, params, results):
             fig_name=f"{session_name}_{space_name}_setting_cdfs",
         )
 
-        hp_cdfs = results["space_hp_returns_cdf"]
+        hp_cdfs = space_results["space_hp_returns_cdf"]
         space_hp_cdfs = np.array([
             cdf
             for hp, cdf in hp_cdfs
