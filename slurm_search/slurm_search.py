@@ -337,7 +337,7 @@ def work_on_slurm_search(session_name, timeout=None):
                 remaining_time = deadline - time()
                 avg_duration = sum(durations) / len(durations)
                 print(f"Avg duration, remaining time: {avg_duration}, {remaining_time}")
-                if avg_duration < remaining_time:
+                if avg_duration > remaining_time:
                     return -1
 
     except TimeoutError as e:
@@ -437,7 +437,7 @@ def wait_on_slurm_search(session_name, iteration):
     while search_active and remaining_workers and (remaining_time > 0):
         print(f"Waiting on workers. Remaining time: {remaining_time}")
         search_active = (search_session_progress(session_name)["status"] == "active")
-        remaining_workers = slurm_iteration_workers(session_name, iteration)
+        remaining_workers = len(slurm_iteration_workers(session_name, iteration)) > 1
         remaining_time = slurm_iteration_remaining_time(session_name, iteration)
         sleep(1 * MINUTE)
 
@@ -468,9 +468,9 @@ def generational_work_on_slurm_search(
         return_code = run(
             ["ssearch", "work_on", session_name, str(timeout)],
             timeout=timeout,
-        )
-        if return_code != 0:
-            print("Search returned non-zero error code.")
+        ).returncode
+        if return_code == 255:
+            print(f"Search returned negative error code: {return_code}. Continuing.")
             search_complete = False
 
     except TimeoutExpired as e:
@@ -480,6 +480,9 @@ def generational_work_on_slurm_search(
         print(f"Search hit {type(e)} exception: '{e}'")
         raise
 
+    if return_code not in (0, 255):
+        print(f"Search work_on hit an exception (positive error code: {return_code}). Stopping.")
+        raise ValueError(f"Search work_on hit an exception (positive error code {return_code}).")
 
     if search_complete:
         print("Search completed. Exiting.")
@@ -505,7 +508,7 @@ def generational_work_on_slurm_search(
     if search_completed:
         print("Search finished, exiting.")
     else:
-        sleep(2 * MINUTE)
+        sleep(20)
 
         launch_next_generation(
             session_name,
