@@ -99,6 +99,15 @@ def bootstrap_search_best_hp(
         key=lambda setting_sample: sum(setting_sample[1]),
     )[0]
 
+def spaced_values(value):
+    max_value = int(value * 1.25)
+
+    return list(range(
+        1,
+        max_value + 1,
+        max(int(max_value / 32), 1),
+    ))
+
 def display_tuning_config_effects(session_name, params, results):
     """
     Perform bootstrapping to analyzepppp setting_samples, runs_per_setting's effects
@@ -124,8 +133,8 @@ def display_tuning_config_effects(session_name, params, results):
         for setting, result in results
     ]
 
-    setting_samples_values = list(range(8, 136+1, 4))
-    runs_per_sample_values = list(range(4, 36+1, 2))
+    setting_samples_values = spaced_values(params["search"]["setting_samples"])
+    runs_per_sample_values = spaced_values(params["search"]["runs_per_setting"])
 
     bootstrap_trials_per_setting = 256
 
