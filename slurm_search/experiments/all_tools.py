@@ -41,6 +41,11 @@ def run_results(env, agent, hp, run_params, run_seed):
     }[agent_type]
     agent_func = getattr(agent_mod, agent_name)
 
+    hp = {
+        hp_key: (int(hp_value) if hp_key.startswith("n_") else hp_value)
+        for hp_key, hp_value in hp.items()
+    }
+
     agent = agent_func(
         device="cuda",
         **hp,
