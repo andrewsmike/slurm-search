@@ -278,17 +278,29 @@ class CallNode(Node):
     def __call__(self, ast_path=None):
         # Bind.
         params = dict(self.params)
+
+        # Resolve string-named experiment parameters.
         params.update({
             param_name: param(param_value)
             for param_name, param_value in params.items()
             if isinstance(param_value, str)
             if param(param_value) is not None
         })
+
+        # Resolve string-named experiment parameters with "_params" suffix.
         params.update({
             param_name: param(param_value[:-len("_params")])
             for param_name, param_value in params.items()
             if isinstance(param_value, str)
             if param(param_value[:-len("_params")]) is not None
+            if param(param_value) is None
+        })
+
+        # Recursively call any Nodes.
+        params.update({
+            param_name: param_value(ast_path=ast_path + [param_name])
+            for param_name, param_value in params.items()
+            if isinstance(param_value, Node)
         })
 
         return self.wrapper.__wrapped__(**params)
