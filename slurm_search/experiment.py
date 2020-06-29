@@ -464,15 +464,21 @@ def random_sampling_objective(spec):
                 ast_path=ast_path,
             )
 
-    # TODO: Replace these with func[spec[...]](ast_path=ast_path).
-    # For the moment we assume we only optimize on top of dictionary results,
-    # using same-layer measures. When we have fully functional resume, revisit
-    # this to allow for arbitrarily deep optimizations.
-    loss_results = results
-    if spec.get("minimize_measure", None):
-        loss_results = results[spec["minimize_measure"]]
-    elif spec.get("maximize_measure", None):
-        loss_results = - results[spec["maximize_measure"]]
+
+    optimizing_measure = spec.get("minimize_measure", spec.get("maximize_measure", None))
+    maximizing = "maximize_measure" in spec
+
+    if optimizing_measure is not None:
+        loss_results = setting_result_tree_measurement(
+            func.space,
+            results["point_values"],
+            func.trials,
+            optimizing_measure,
+        )
+        if maximizing:
+            loss_results = - loss_results
+    else:
+        loss_results = results
 
     # So you can return interesting data.
     if isinstance(loss_results, (int, float)):

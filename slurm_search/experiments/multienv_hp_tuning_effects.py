@@ -21,7 +21,6 @@ from slurm_search.experiments.display_tools import (
 
 @accepts_param_names
 def linear_env_norm(env, return_mean):
-
     low, high = env_min_max_scores()[env]
 
     return (return_mean - low) / (high - low)
@@ -62,7 +61,7 @@ def multienv_hp_tuning_effects():
                     return_mean("env", "agent", "hp", "run_params", "run_seed"),
                 ),
                 sample_count="eval:run_samples_per_env",
-                method="search:method",
+                method="inline",
                 threads="eval:threads",
             ),
             sample_count="eval:env_samples",
@@ -75,11 +74,11 @@ def multienv_hp_tuning_effects():
 
         "best_hp_results": best_hp_samples,
 
-        "space_returns_mean": space_samples["mean:mean"],
-        "space_returns_std": space_samples["std:mean"],
-        "space_returns_cdf": space_samples["cdf:mean"],
-        "space_hp_returns_mean": space_samples["point_values:mean"],
-        "space_hp_returns_cdf": space_samples["point_values:cdf"],
+        "space_returns_mean": space_samples["mean:mean:mean"],
+        "space_returns_std": space_samples["std:mean:mean"],
+        "space_returns_cdf": space_samples["cdf:mean:mean"],
+        "space_hp_returns_mean": space_samples["point_values:mean:mean"],
+        "space_hp_returns_cdf": space_samples["point_values:cdf:mean"],
     }
 
 
@@ -111,22 +110,29 @@ multienv_hp_tuning_effects_config = {
         "method": "slurm",
         "threads": 18,
 
-        "setting_samples": 96,
-        "env_samples_per_setting": 12,
+        "setting_samples": 12,
+        "env_samples_per_setting": 6,
         "run_samples_per_setting_env": 1,
     },
     "eval": {
         "method": "slurm",
         "threads": 18,
 
-        "env_samples": 36,
+        "env_samples": 18,
         "run_samples_per_env": 1,
     },
 }
 
 multienv_hp_tuning_effects_debug_overrides = {
-    "search": {"method": "inline"},
-    "eval": {"method": "inline"},
+    "search": {
+        "method": "inline",
+        "setting_samples": 3,
+        "env_samples_per_setting": 2,
+    },
+    "eval": {
+        "method": "inline",
+        "env_samples": 6,
+    },
     "agent": "debug",
 }
 
