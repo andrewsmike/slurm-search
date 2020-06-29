@@ -464,16 +464,15 @@ def random_sampling_objective(spec):
                 ast_path=ast_path,
             )
 
-
-    optimizing_measure = spec.get("minimize_measure", spec.get("maximize_measure", None))
-    maximizing = "maximize_measure" in spec
+    optimizing_measure = spec.get("minimize_measure", None) or spec.get("maximize_measure", None)
+    maximizing = spec.get("maximize_measure", None) is not None
 
     if optimizing_measure is not None:
         loss_results = setting_result_tree_measurement(
             func.space,
             results["point_values"],
             func.trials,
-            optimizing_measure,
+            optimizing_measure.split(":"),
         )
         if maximizing:
             loss_results = - loss_results

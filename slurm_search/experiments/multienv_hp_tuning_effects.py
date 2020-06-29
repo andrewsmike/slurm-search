@@ -43,7 +43,7 @@ def multienv_hp_tuning_effects():
             method="inline",
         ),
         sample_count="search:setting_samples",
-        maximize_measure="mean:mean", # exp params, item, closures (inc experiments)
+        maximize_measure="mean:mean",
 
         method="search:method",
         threads="search:threads",
