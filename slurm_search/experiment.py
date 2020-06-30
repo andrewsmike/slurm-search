@@ -124,6 +124,27 @@ def experiment_partial_result(session_name, ast_path):
 
         return node.get("partial_result", None)
 
+def experiment_subsessions(session_name):
+    with lock(session_name):
+        experiment_state = session_state(session_name)
+
+        partial_results = experiment_state.get("partial_results", {})
+
+    # A reduced_params method would be neat here.
+    subsession_names = set()
+    def collect_session_names(data, prefix):
+        if (
+                prefix
+                and prefix[-1] == "partial_result"
+                and isinstance(data, str)
+                and (data.startswith("slurm:")
+                     or data.startswith("sampling:"))
+        ):
+            subsession_names.add(data)
+
+    mapped_params(collect_session_names, partial_results)
+
+    return subsession_names
 
 ## Experiment runtime management.
 _current_experiment = None

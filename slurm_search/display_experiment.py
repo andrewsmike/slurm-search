@@ -9,6 +9,7 @@ from sys import argv
 
 from slurm_search.experiment import (
     experiment_details,
+    experiment_subsessions,
     run_experiment,
 )
 from slurm_search.experiments import experiment_spec
@@ -17,6 +18,7 @@ from slurm_search.params import (
     unflattened_params,
     updated_params,
 )
+from slurm_search.slurm_search import stop_slurm_searches
 
 def display_experiment():
     args = argv[1:]
@@ -29,7 +31,7 @@ def display_experiment():
     exp_name, args = args[0], args[1:]
     params = unflattened_params(params_from_args(args))
 
-    meta_param_names = {"resume", "display-ast", "debug"}
+    meta_param_names = {"resume", "display-ast", "debug", "stop"}
     meta_params = {
         param_name: params.get(param_name, None)
         for param_name in meta_param_names
@@ -49,6 +51,13 @@ def display_experiment():
             params,
             exp_spec["debug_overrides"],
         )
+
+    stop_session_name = meta_params.get("stop", None)
+    if stop_session_name is not None:
+        subsession_names = experiment_subsessions(stop_session_name)
+        stop_session_names = [stop_session_name] + list(subsession_names)
+        stop_slurm_searches(*stop_session_names)
+        return
 
     all_params = updated_params(exp_spec["config"], overrides)
 
