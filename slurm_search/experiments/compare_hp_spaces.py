@@ -64,46 +64,57 @@ def compare_hp_spaces():
 
     return space_results
 
+import hyperopt.pyll
+from hyperopt.pyll import scope
+
+@scope.define
+def bounded(val, minimum=None, maximum=None):
+    if minimum is not None:
+        val = max(val, minimum)
+    if maximum is not None:
+        val = min(val, maximum)
+
+    return val
 
 compare_hp_spaces_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
 
     "loguniform_hp_space": {
-        "clip_grad": hp.loguniform("clip_grad", log(0.1), log(1)),
-        "lr": hp.loguniform("lr", log(1e-4), log(1e-2)),
-        "entropy_loss_scaling": hp.uniform("els", 0, 0.1),
+        "clip_grad": scope.bounded(hp.loguniform("clip_grad", log(0.1), log(1)), minimum=0.001, maximum=1),
+        "lr": scope.bounded(hp.loguniform("lr", log(1e-4), log(1e-2)), minimum=0, maximum=1),
+        "entropy_loss_scaling": scope.bounded(hp.uniform("els", 0, 0.1), minimum=0),
         #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
-        "n_envs": hp.qloguniform("n_envs", log(1), log(32), 1),
-        "n_steps": hp.qloguniform("n_steps", log(1), log(16), 1),
+        "n_envs": scope.bounded(hp.qloguniform("n_envs", log(1), log(32), 1), minimum=1, maximum=32),
+        "n_steps": scope.bounded(hp.qloguniform("n_steps", log(1), log(16), 1), minimum=1, maximum=32),
     },
 
     # Set 3std ~= min or max
     "lognormal_hp_space": {
-        "clip_grad": hp.normal("clip_grad", 0.4, 0.1),
-        "lr": hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3),
-        "entropy_loss_scaling": hp.normal("els", 0.06, 0.01), # Must not go neg
+        "clip_grad": scope.bounded(hp.normal("clip_grad", 0.4, 0.1), minimum=0.001, maximum=1),
+        "lr": scope.bounded(hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3), minimum=0, maximum=1),
+        "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.06, 0.01), minimum=0),
         #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
-        "n_envs": hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1),
-        "n_steps": hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1),
+        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=1, maximum=32),
+        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1), minimum=1, maximum=32),
     },
 
     "lognormal_smaller_hp_space": {
-        "clip_grad": hp.normal("clip_grad", 0.15, 0.04),
-        "lr": hp.lognormal("lr", log(7e-4), (log(7e-4) - log(1e-4))/6),
-        "entropy_loss_scaling": hp.normal("els", 0.03, 0.008), # Must not go neg
+        "clip_grad": scope.bounded(hp.normal("clip_grad", 0.15, 0.04), minimum=0.001, maximum=1),
+        "lr": scope.bounded(hp.lognormal("lr", log(7e-4), (log(7e-4) - log(1e-4))/6), minimum=0, maximum=1),
+        "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.03, 0.008), minimum=0),
         #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
-        "n_envs": hp.qlognormal("n_envs", log(32), log(32)/8, 1),
-        "n_steps": hp.qlognormal("n_steps", log(5), log(5)/6, 1),
+        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=1, maximum=32),
+        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(5), log(5)/6, 1), minimum=1, maximum=32),
     },
 
     "lognormal_smallerer_hp_space": {
-        "clip_grad": hp.normal("clip_grad", 0.12, 0.02),
-        "lr": hp.lognormal("lr", log(7e-4), (log(7e-4) - log(1e-4))/12),
-        "entropy_loss_scaling": hp.normal("els", 0.03, 0.004), # Must not go neg
+        "clip_grad": scope.bounded(hp.normal("clip_grad", 0.12, 0.02), minimum=0.001, maximum=1),
+        "lr": scope.bounded(hp.lognormal("lr", log(7e-4), (log(7e-4) - log(1e-4))/12), minimum=0, maximum=1),
+        "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.03, 0.004), minimum=0),
         #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
-        "n_envs": hp.qlognormal("n_envs", log(32), log(32)/16, 1),
-        "n_steps": hp.qlognormal("n_steps", log(5), log(5)/8, 1),
+        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/16, 1), minimum=1, maximum=32),
+        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(5), log(5)/8, 1), minimum=1, maximum=32),
     },
 
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),

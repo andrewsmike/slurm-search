@@ -110,7 +110,7 @@ def spaced_values(value):
 
 def display_tuning_config_effects(session_name, params, results):
     """
-    Perform bootstrapping to analyzepppp setting_samples, runs_per_setting's effects
+    Perform bootstrapping to analyze setting_samples, runs_per_setting's effects
     on search performance.
     """
 
