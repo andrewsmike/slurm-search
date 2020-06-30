@@ -39,7 +39,7 @@ DEFAULT_ENV_PATH = (
     "~/src/slurm_search/slurm_search/experiments/env_baselines.csv"
 )
 
-@lru_cache
+@lru_cache(maxsize=None)
 def env_agent_data(path=None):
     path = path or expanduser(DEFAULT_ENV_PATH)
 
@@ -60,7 +60,7 @@ def env_agent_score(env, agent, path=None):
 
     return env_row["agent"]
 
-@lru_cache
+@lru_cache(maxsize=None)
 def env_min_max_scores(path=None):
     rows = env_agent_data(path)
 

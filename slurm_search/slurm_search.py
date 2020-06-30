@@ -189,16 +189,21 @@ def stop_all_slurm_searches(session_type="slurm"):
 
     print("TODO: You may want to kill the remaining slurm workers. They could take a while to die off.")
 
-def display_slurm_searches(search_type="slurm", show_inactive=False):
-    print("Active sessions (may not have workers):")
+def display_slurm_searches(search_type="slurm", show_inactive=False, session_names=None):
+    if not session_names:
+        print("Active sessions (may not have workers):")
+        session_names = search_session_names(
+            search_type=search_type,
+            filter_inactive=not show_inactive,
+        )
+    else:
+        print("Sessions:")
+
     rows =[
         search_session_progress(
             session_name,
         )
-        for session_name in search_session_names(
-                search_type=search_type,
-                filter_inactive=not show_inactive,
-        )
+        for session_name in session_names
     ]
     display_table(
         columns=[
