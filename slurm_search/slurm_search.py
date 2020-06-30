@@ -164,8 +164,13 @@ def restart_slurm_search(session_name):
 
 def stop_slurm_searches(*session_names):
     for session_name in session_names:
-        disable_search_session(session_name)
-        print(f"[{session_name}] Disabled search. No more trials will start.")
+        try:
+            disable_search_session(session_name)
+            print(f"[{session_name}] Disabled search. No more trials will start.")
+        except Exception as e:
+            print(f"[{session_name}] Failed to stop search, state probably corrupted.")
+            print(e)
+
     print("TODO: You may want to kill the remaining slurm workers. They could take a while to die off.")
 
 def stop_all_slurm_searches(session_type="slurm"):
@@ -277,10 +282,14 @@ def inspect_slurm_search_state(session_name):
         ),
     )
 
-def display_search_session_logs(session_name):
+def display_search_session_logs(session_name, worker_number=None):
     session_name = session_name.split(":")[1]
     logs_dir = expanduser(f"~/hyperparameters/search/{session_name}/logs")
-    log_files = glob(join(logs_dir, "*"))
+    if worker_number is None:
+        log_files = glob(join(logs_dir, "worker_*_*.*"))
+    else:
+        log_files = glob(join(logs_dir, f"worker_*_{worker_number}.*"))
+
     run(["tail", "-n", "+1"] + log_files)
 
 
