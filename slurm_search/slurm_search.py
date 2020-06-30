@@ -78,6 +78,9 @@ def launch_parallel_search_workers(session_name):
     print(f"[{session_name}] Workers finished. Exiting...")
 
 def slurm_job_name(session_name, iteration=0):
+    if session_name.startswith("slurm:"):
+        session_name = session_name[len("slurm:"):]
+
     return f"all_auto_{session_name}_{iteration}"
 
 def write_slurm_script(path, slurm_args, command):
@@ -126,7 +129,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
             #"mem-per-cpu": 300,
             #"time": "05:00",
             "time": "03:40:00",
-            "mem-per-cpu": 2000,
+            "mem-per-cpu": 2500,
             "gres": "gpu:1",
             "partition": "1080ti-short",
             "array": f"0-{thread_count - 1}",
@@ -433,10 +436,13 @@ def slurm_iteration_deadline():
 def slurm_iteration_workers(session_name, iteration):
     job_name = slurm_job_name(session_name, iteration=iteration)
     job_id_strs = check_output(
-        ["squeue", "-n", job_name, "-u", user(), "-o", "%A", "-h"]
+        ["squeue", "-n", job_name, "-u", user(), "-o", "%A", "-h"],
     ).decode().split("\n")
 
-    return {int(job_id_str) for job_id_str in job_id_strs if job_id_str}
+    results = {int(job_id_str) for job_id_str in job_id_strs if job_id_str}
+
+    print(results)
+    return results
 
 def wait_on_slurm_search(session_name, iteration):
     search_active = (search_session_progress(session_name)["status"] == "active")
@@ -444,10 +450,10 @@ def wait_on_slurm_search(session_name, iteration):
     remaining_time = slurm_iteration_remaining_time(session_name, iteration) # Unnecessary
 
     while search_active and remaining_workers and (remaining_time > 0):
-        print(f"Waiting on workers. Remaining time: {remaining_time}")
         search_active = (search_session_progress(session_name)["status"] == "active")
         remaining_workers = len(slurm_iteration_workers(session_name, iteration)) > 1
         remaining_time = slurm_iteration_remaining_time(session_name, iteration)
+        print(f"Workers still running and there is remaining time ({remaining_time}). Waiting 1m.", flush=True)
         sleep(1 * MINUTE)
 
     return not search_active
@@ -457,6 +463,22 @@ def generational_work_on_slurm_search(
         timeout=3 * HOUR + 40 * MINUTE,
         max_iters=24,
 ):
+    """
+    Meta-process for launching workers, cleaning up after them, and launching the
+    next generation.
+
+    Not primary (slurm array task ID isn't 0):
+    - Give primary 20s to get prepared.
+    - Run until timeout, deadline, exception, or completion.
+
+    Primary:
+    - Set the session iteration deadline.
+    - Run until timeout, deadline, exception, or completion.
+    - Wait for other workers.
+    - If exception, exit.
+    - Reset interrupted trials.
+    - Launch next generation.
+    """
     iteration = slurm_iteration()
     assert iteration, "This command must be run from within a slurm worker."
 
@@ -471,34 +493,41 @@ def generational_work_on_slurm_search(
         sleep(20)
 
     timeout = slurm_iteration_remaining_time(session_name, iteration)
+    start_time = time()
 
-    search_complete = True
-    try:
-        return_code = run(
-            ["ssearch", "work_on", session_name, str(timeout)],
-            timeout=timeout,
-        ).returncode
-        if return_code == 255:
-            print(f"Search returned negative error code: {return_code}. Continuing.")
-            search_complete = False
+    # Work_on doesn't interrupt on timeout, so use timeout command.
+    timeout_work_on_command = [
+        "timeout", str(max(int(timeout), 1)),
+        "ssearch", "work_on", session_name, str(timeout),
+    ]
 
-    except TimeoutExpired as e:
-        search_complete = False
-        print("Search timed out.")
-    except Exception as e:
-        print(f"Search hit {type(e)} exception: '{e}'")
-        raise
+    work_on_thread_count = 2
+    workers = [
+        Popen(timeout_work_on_command)
+        for work_on_thread in range(work_on_thread_count)
+    ]
 
-    if return_code not in (0, 255):
-        print(f"Search work_on hit an exception (positive error code: {return_code}). Stopping.")
-        raise ValueError(f"Search work_on hit an exception (positive error code {return_code}).")
-
-    if search_complete:
-        print("Search completed. Exiting.")
-        return 0
+    print("Waiting on work_on threads.", flush=True)
+    for worker in workers:
+        worker.wait()
 
     if not am_primary:
-        print("Search incomplete, but I am not the primary. Exiting.")
+        print("Workers finished and I am not the primary. Exiting.")
+        return 0
+
+    print("Work_on threads finished and I am the primary.")
+    print("Waiting on other slurm workers.", flush=True)
+    search_completed = wait_on_slurm_search(
+        session_name,
+        iteration,
+    )
+
+    if search_completed:
+        print("Search is no longer active. Exiting.")
+        return 0
+
+    if time() - start_time < 40 * MINUTE:
+        print("Workers returned way too quickly, probably hit error. Exiting.")
         return 0
 
     if max_iters and iteration >= max_iters:
@@ -506,24 +535,14 @@ def generational_work_on_slurm_search(
               f"max_iters ({max_iters}). Exiting.")
         return 0
 
-    print("Search didn't complete and I am the primary.")
-    print("Waiting for workers to finish.")
+    print("Waiting a bit, then launching next generation.", flush=True)
+    sleep(20)
 
-    search_completed = wait_on_slurm_search(
+    launch_next_generation(
         session_name,
-        iteration,
+        iteration + 1,
+        thread_count=slurm_array_task_count(),
     )
-
-    if search_completed:
-        print("Search finished, exiting.")
-    else:
-        sleep(20)
-
-        launch_next_generation(
-            session_name,
-            iteration + 1,
-            thread_count=slurm_array_task_count(),
-        )
 
 def main():
     args = argv[1:]
