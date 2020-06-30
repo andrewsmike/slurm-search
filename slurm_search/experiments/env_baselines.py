@@ -19,20 +19,20 @@ agent_names = {
 }
 
 env_names = {
-    "Asterix", "Beam Rider", "Freeway", "Seaquest",
-    "Space Invaders", "Alien", "Amidar", "Assault",
-    "Asteroids", "Atlantis", "Bank Heist", "Battle Zone",
+    "Asterix", "BeamRider", "Freeway", "Seaquest",
+    "SpaceInvaders", "Alien", "Amidar", "Assault",
+    "Asteroids", "Atlantis", "BankHeist", "BattleZone",
     "Berzerk", "Bowling", "Boxing", "Breakout",
-    "Carnival", "Centipede", "Chopper Command", "Crazy Climber",
-    "Demon Attack", "Double Dunk", "Elevator Action", "Enduro",
-    "Fishing Derby", "Frostbite", "Gopher", "Gravitar",
-    "H.E.R.O.", "Ice Hockey", "James Bond", "Journey Escape",
-    "Kangaroo", "Krull", "Kung-Fu Master", "Montezuma’s Revenge",
-    "Ms. Pac-Man", "Name This Game", "Pooyan", "Pong",
-    "Private Eye", "Q*Bert", "River Raid", "Road Runner",
-    "Robotank", "Skiing", "Star Gunner", "Tennis",
-    "Time Pilot", "Tutankham", "Up and Down", "Venture",
-    "Video Pinball", "Wizard of Wor", "Zaxxon",
+    "Carnival", "Centipede", "ChopperCommand", "CrazyClimber",
+    "DemonAttack", "DoubleDunk", "ElevatorAction", "Enduro",
+    "FishingDerby", "Frostbite", "Gopher", "Gravitar",
+    "Hero", "IceHockey", "JamesBond", "JourneyEscape",
+    "Kangaroo", "Krull", "KungFuMaster", "MontezumaRevenge",
+    "MsPacman", "NameThisGame", "Pooyan", "Pong",
+    "PrivateEye", "QBert", "RiverRaid", "RoadRunner",
+    "Robotank", "Skiing", "StarGunner", "Tennis",
+    "TimePilot", "Tutankham", "UpandDown", "Venture",
+    "VideoPinball", "WizardofWor", "Zaxxon",
 }
 
 DEFAULT_ENV_PATH = (
@@ -56,7 +56,7 @@ def env_agent_data(path=None):
 def env_agent_score(env, agent, path=None):
     rows = env_agent_data(path)
 
-    env_row, = [row for row in rows if row["Game"] == env]
+    env_row, = [row for row in rows if row["ALE Game Name"] == env]
 
     return env_row["agent"]
 
@@ -65,7 +65,7 @@ def env_min_max_scores(path=None):
     rows = env_agent_data(path)
 
     return {
-        row["Game"]: (
+        row["ALE Game Name"]: (
             min(float(row[agent_name]) for agent_name in agent_names),
             max(float(row[agent_name]) for agent_name in agent_names),
         )
