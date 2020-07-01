@@ -177,7 +177,7 @@ def display_compare_hp_spaces(session_name, params, results):
         display_cdfs(
             cdfs,
             labels,
-            title="Performance CDFs of various HPs [{space_name}].",
+            title=f"Performance CDFs of various HPs [{space_name}].",
             fig_name=f"{session_name}_{space_name}_setting_cdfs",
         )
 

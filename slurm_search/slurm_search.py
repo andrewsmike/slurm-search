@@ -119,7 +119,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
         "array": f"0-{dev_thread_count - 1}",
         "ntasks": 1,
         "mem-per-cpu": 10,
-        "exclude": "node114,node121", # 114 is running really slow. 121 hits CUDA exceptions.
+        "exclude": "node114,node121,node149", # 114 is running really slow. 121 hits CUDA exceptions.
     }
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
@@ -128,7 +128,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
         slurm_args.update({
             #"mem-per-cpu": 300,
             #"time": "05:00",
-            "time": "03:40:00",
+            "time": "03:55:00",
             "mem-per-cpu": 2500,
             "gres": "gpu:1",
             "partition": "1080ti-short",

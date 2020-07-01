@@ -12,7 +12,10 @@ from slurm_search.experiment import (
     use,
 )
 from slurm_search.experiments.all_tools import return_mean
-from slurm_search.experiments.env_baselines import env_min_max_scores
+from slurm_search.experiments.env_baselines import (
+    env_min_max_scores,
+    env_names,
+)
 from slurm_search.experiments.display_tools import (
     display_cdfs,
     display_setting_surface,
@@ -21,6 +24,9 @@ from slurm_search.experiments.display_tools import (
 
 @accepts_param_names
 def linear_env_norm(env, return_mean):
+    if env.startswith("atari:"):
+        env = env[len("atari:"):]
+
     low, high = env_min_max_scores()[env]
 
     return (return_mean - low) / (high - low)
@@ -82,21 +88,47 @@ def multienv_hp_tuning_effects():
     }
 
 
+import hyperopt.pyll
+from hyperopt.pyll import scope
+
+if not hasattr(scope, "bounded"):
+    @scope.define
+    def bounded(val, minimum=None, maximum=None):
+        if minimum is not None:
+            val = max(val, minimum)
+        if maximum is not None:
+            val = min(val, maximum)
+        return val
+
+safe_atari_envs = [
+    f"atari:{env}"
+    for env in sorted(env_names)
+    if env not in { # Throw exceptions for whatever reasons.
+            "QBert", "KungFuMaster", "Freeway", "WizardOfWor",
+            "UpandDown", "JamesBond", "RiverRaid", "Skiing",
+            "Tutankham", "JourneyEscape", "MsPacman", "Asterix",
+    } # Too slow: VideoPinball
+]
+
 multienv_hp_tuning_effects_config = {
-    "agent": "classic:a2c",
+    "agent": "atari:a2c",
 
     #"env": "classic:CartPole-v1",
     "env_space": hp.choice(
         "env",
-        [
-            "classic:CartPole-v0",
-            "classic:CartPole-v1",
-        ],
+        safe_atari_envs,
     ),
 
     "hp_space": {
-        "lr": hp.loguniform("lr", log(0.0001), log(0.01)),
-        "entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
+        "clip_grad": scope.bounded(hp.normal("clip_grad", 0.4, 0.1), minimum=0.001, maximum=1),
+        "lr": scope.bounded(hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3), minimum=0, maximum=1),
+        "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.06, 0.01), minimum=0),
+        "value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
+        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=1, maximum=32),
+        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1), minimum=1, maximum=32),
+
+        #"lr": hp.loguniform("lr", log(0.0001), log(0.01)),
+        #"entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
     },
 
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
@@ -108,17 +140,17 @@ multienv_hp_tuning_effects_config = {
     },
     "search": {
         "method": "slurm",
-        "threads": 18,
+        "threads": 16,
 
-        "setting_samples": 12,
+        "setting_samples": 16,
         "env_samples_per_setting": 6,
         "run_samples_per_setting_env": 1,
     },
     "eval": {
         "method": "slurm",
-        "threads": 18,
+        "threads": 16,
 
-        "env_samples": 18,
+        "env_samples": 16,
         "run_samples_per_env": 1,
     },
 }
