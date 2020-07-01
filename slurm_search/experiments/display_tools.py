@@ -7,6 +7,7 @@ import matplotlib.tri as tri
 def display_cdfs(
         cdfs,
         labels=None,
+        xlabel=None,
         ylabel=None,
         title=None,
         fig_name=None,
@@ -24,7 +25,9 @@ def display_cdfs(
     if title:
         plt.title(title)
 
-    plt.xlabel("Percentile")
+    xlabel = xlabel or "Percentile"
+    plt.xlabel(xlabel)
+
     if ylabel:
         plt.ylabel(ylabel)
 
@@ -33,6 +36,7 @@ def display_cdfs(
 
     if fig_name:
         plt.savefig(f"{fig_name}.png")
+        plt.clf()
 
 
 def display_surface(
@@ -111,11 +115,12 @@ def display_surface(
     if title:
         ax_surface.set_title(title)
 
-    if fig_name:
-        fig_surface.savefig(f"{fig_name}_surface.png")
-
     if show:
         plt.show()
+
+    if fig_name:
+        fig_surface.savefig(f"{fig_name}_surface.png")
+        plt.clf()
 
     fig_contour = plt.figure()
     ax_contour = fig_contour.gca()
@@ -152,11 +157,12 @@ def display_surface(
     if title:
         ax_contour.set_title(title)
 
-    if fig_name:
-        fig_contour.savefig(f"{fig_name}_contour.png")
-
     if show:
         plt.show()
+
+    if fig_name:
+        fig_contour.savefig(f"{fig_name}_contour.png")
+        plt.clf()
 
 
 def display_setting_surface(
@@ -228,3 +234,41 @@ def display_setting_cdf_surface(
         show=show,
     )
 
+def display_setting_samples(
+        point_groups,
+        labels=None,
+        xlabel=None,
+        xscale="linear",
+        ylabel=None,
+        title=None,
+        fig_name=None,
+        show=False,
+):
+    labels = labels or [f"Group {i+1}" for i in range(len(point_groups))]
+    for point_group, label in zip(point_groups, labels):
+        setting_values, setting_returns = zip(*(point_group))
+        plt.scatter(setting_values, setting_returns, marker=".", label=label)
+
+        # Also mark best as a larger circle.
+        best_setting, best_setting_returns = max(point_group, key=lambda point: point[1])
+        plt.scatter(best_setting, best_setting_returns, marker="^", label=label)
+
+    if labels:
+        plt.legend()
+
+    if title:
+        plt.title(title)
+
+    plt.xscale(xscale)
+
+    if xlabel:
+        plt.xlabel(xlabel)
+    if ylabel:
+        plt.ylabel(ylabel)
+
+    if show:
+        plt.show()
+
+    if fig_name:
+        plt.savefig(f"{fig_name}.png")
+        plt.clf()
