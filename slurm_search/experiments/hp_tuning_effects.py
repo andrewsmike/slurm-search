@@ -73,10 +73,19 @@ hp_tuning_effects_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
 
-    "hp_space": {
-        "lr": hp.loguniform("lr", log(0.0001), log(0.01)),
-        "entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
+    "hp_space": { # lognormal_hp_space
+        #IRRELEVANT "clip_grad": scope.bounded(hp.normal("clip_grad", 0.4, 0.1), minimum=0.001, maximum=1),
+        "lr": scope.bounded(hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3), minimum=0, maximum=1),
+        #IRRELEVANT "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.06, 0.01), minimum=0),
+        #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
+        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=1, maximum=32),
+        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1), minimum=1, maximum=32),
     },
+
+    # "hp_space": {
+    #     "lr": hp.loguniform("lr", log(0.0001), log(0.01)),
+    #     "entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
+    # },
 
     "run_seed_space": hp.quniform("run_seed", 0, 2 ** 31, 1),
 
