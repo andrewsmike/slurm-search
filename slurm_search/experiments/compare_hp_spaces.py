@@ -67,14 +67,15 @@ def compare_hp_spaces():
 import hyperopt.pyll
 from hyperopt.pyll import scope
 
-@scope.define
-def bounded(val, minimum=None, maximum=None):
-    if minimum is not None:
-        val = max(val, minimum)
-    if maximum is not None:
-        val = min(val, maximum)
+if not hasattr(scope, "bounded"):
+    @scope.define
+    def bounded(val, minimum=None, maximum=None):
+        if minimum is not None:
+            val = max(val, minimum)
+        if maximum is not None:
+            val = min(val, maximum)
 
-    return val
+        return val
 
 compare_hp_spaces_config = {
     "agent": "classic:a2c",

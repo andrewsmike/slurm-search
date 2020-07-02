@@ -69,6 +69,19 @@ def hp_tuning_effects():
     }
 
 
+import hyperopt.pyll
+from hyperopt.pyll import scope
+
+if not hasattr(scope, "bounded"):
+    @scope.define
+    def bounded(val, minimum=None, maximum=None):
+        if minimum is not None:
+            val = max(val, minimum)
+        if maximum is not None:
+            val = min(val, maximum)
+
+        return val
+
 hp_tuning_effects_config = {
     "agent": "classic:a2c",
     "env": "classic:CartPole-v1",
