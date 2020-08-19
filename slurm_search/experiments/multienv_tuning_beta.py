@@ -18,9 +18,9 @@ from slurm_search.experiments.env_baselines import (
 )
 from slurm_search.experiments.display_tools import (
     display_cdfs,
-    display_setting_samples,
     display_setting_surface,
     display_setting_cdf_surface,
+    display_setting_samples,
 )
 
 @accepts_param_names
@@ -32,7 +32,7 @@ def linear_env_norm(env, return_mean):
 
     return (return_mean - low) / (high - low)
 
-def multienv_hp_tuning_effects():
+def multienv_tuning_beta():
     space_samples = maximizing_sampling(
         "hp",
         random_sampling(
@@ -108,17 +108,16 @@ safe_atari_envs = [
     for env in sorted(env_names)
     if env not in {
             # Throw exceptions for whatever reasons.
-            "QBert", "KungFuMaster", "Freeway", "WizardOfWor", # WizardofWar
+            "QBert", "KungFuMaster", "Freeway", "WizardofWor",
             "UpandDown", "JamesBond", "RiverRaid", "Skiing",
             "Tutankham", "JourneyEscape", "MsPacman", "Asterix",
             # Too slow to complete 2M frames in <4h.
             "VideoPinball", "DoubleDunk", "CrazyClimber", "Hero",
-            # Gravitar
-            # ElevatorAction
+            "Gravitar", "ElevatorAction",
     }
 ]
 
-multienv_hp_tuning_effects_config = {
+multienv_tuning_beta_config = {
     "agent": "atari:a2c",
 
     #"env": "classic:CartPole-v1",
@@ -132,8 +131,8 @@ multienv_hp_tuning_effects_config = {
         "lr": scope.bounded(hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3), minimum=0, maximum=1),
         "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.06, 0.01), minimum=0),
         "value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
-        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=1, maximum=32),
-        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1), minimum=1, maximum=32),
+        "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=2, maximum=32),
+        "n_steps": scope.bounded(hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1), minimum=2, maximum=32),
 
         #"lr": hp.loguniform("lr", log(0.0001), log(0.01)),
         #"entropy_loss_scaling": hp.uniform("els", 0.0, 0.1),
@@ -163,7 +162,7 @@ multienv_hp_tuning_effects_config = {
     },
 }
 
-multienv_hp_tuning_effects_debug_overrides = {
+multienv_tuning_beta_debug_overrides = {
     "search": {
         "method": "inline",
         "setting_samples": 3,
@@ -176,7 +175,7 @@ multienv_hp_tuning_effects_debug_overrides = {
     "agent": "debug",
 }
 
-def display_multienv_hp_tuning_effects(session_name, params, results):
+def display_multienv_tuning_beta(session_name, params, results):
     display_setting_surface(
         results["space_hp_returns_mean"],
         setting_dims=["entropy_loss_scaling", "lr"],
@@ -192,12 +191,12 @@ def display_multienv_hp_tuning_effects(session_name, params, results):
         )
     except:
         pass
-    best_flattened = [
+
+    best_flattened = np.array([
         result
         for env, env_results in results["best_hp_results"]["point_values"]
         for seed, result in env_results["point_values"]
-    ]
-    best_flattened = np.array(best_flattened)
+    ])
     best_mean = best_flattened.mean()
     best_std = best_flattened.std()
     best_cdf = np.sort(best_flattened)
@@ -244,23 +243,15 @@ def display_multienv_hp_tuning_effects(session_name, params, results):
     setting_point_group = {
         setting_name: [
             (hp[setting_name], run_result)
-            for hp, hp_results in results["space_results"]["point_values"]
-            for env, env_results in hp_results["point_values"]
-            for seed, run_result in env_results["point_values"]
+            for env, env_results in results["space_results"]["point_values"]
+            for hp, hp_results in env_results["point_values"]
+            for seed, run_result in hp_results["point_values"]
         ]
         for setting_name in setting_names
     }
     for setting_name, point_group in setting_point_group.items():
-        best_setting = results["best_hp"][setting_name]
-        best_setting_values = [
-            value
-            for setting, value in point_group
-            if setting == best_setting
-        ]
-        best_setting_value = np.array(best_setting_values).mean()
         display_setting_samples(
             point_groups=[point_group],
-            best_choices=[(best_setting, best_setting_value)],
             labels=[setting_name],
             title=f"Multienv {setting_name} performance.",
             fig_name=f"{session_name}_{setting_name}_performance",
@@ -269,9 +260,9 @@ def display_multienv_hp_tuning_effects(session_name, params, results):
 
 
 
-multienv_hp_tuning_effects_exp = {
-    "config": multienv_hp_tuning_effects_config,
-    "debug_overrides": multienv_hp_tuning_effects_debug_overrides,
-    "display_func": display_multienv_hp_tuning_effects,
-    "experiment_func": multienv_hp_tuning_effects,
+multienv_tuning_beta_exp = {
+    "config": multienv_tuning_beta_config,
+    "debug_overrides": multienv_tuning_beta_debug_overrides,
+    "display_func": display_multienv_tuning_beta,
+    "experiment_func": multienv_tuning_beta,
 }

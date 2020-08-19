@@ -1,11 +1,12 @@
 """
-Provide env / agent performance baseline data from ALE paper and experiments.
-Sources include https://arxiv.org/pdf/1207.4708.pdf, Appendix D.1, Table 4, and
-manual entry.
+Provide env / agent performance baseline data from benchmarks, ALE paper, and experiments.
+Sources include https://arxiv.org/pdf/1207.4708.pdf, Appendix D.1, Table 4,
+manual entry, and simulations.
 """
 from csv import reader
 from functools import lru_cache
 from os.path import expanduser
+from pickle import load
 
 agent_names = {
     "Basic",
@@ -71,6 +72,15 @@ def env_min_max_scores(path=None):
         )
         for row in rows
     }
+
+
+@lru_cache(maxsize=None)
+def benchmark_data(benchmark_name):
+    with open(expanduser(f"~/benchmark_{benchmark_name}.pkl"), "rb") as f:
+        return load(f)
+
+def benchmark_env_cdf(benchmark_name, env):
+    return benchmark_data(benchmark_name)["env_cdfs"][env]
 
 if __name__ == "__main__":
     from pprint import pprint

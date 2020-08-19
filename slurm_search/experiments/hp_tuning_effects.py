@@ -13,6 +13,7 @@ from slurm_search.experiments.display_tools import (
     display_cdfs,
     display_setting_surface,
     display_setting_cdf_surface,
+    display_bootstrapped_random_search_runs,
 )
 
 def hp_tuning_effects():
@@ -61,6 +62,8 @@ def hp_tuning_effects():
         "best_hp_results": best_hp_samples,
         "worst_hp_results": worst_hp_samples,
 
+        "space_samples": space_samples,
+
         "space_returns_mean": space_samples["mean:mean"],
         "space_returns_std": space_samples["std:mean"],
         "space_returns_cdf": space_samples["cdf:mean"],
@@ -87,9 +90,9 @@ hp_tuning_effects_config = {
     "env": "classic:CartPole-v1",
 
     "hp_space": { # lognormal_hp_space
-        #IRRELEVANT "clip_grad": scope.bounded(hp.normal("clip_grad", 0.4, 0.1), minimum=0.001, maximum=1),
+        "clip_grad": scope.bounded(hp.normal("clip_grad", 0.4, 0.1), minimum=0.001, maximum=1),
         "lr": scope.bounded(hp.lognormal("lr", log(1e-3), (log(1e-3) - log(1e-4))/3), minimum=0, maximum=1),
-        #IRRELEVANT "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.06, 0.01), minimum=0),
+        "entropy_loss_scaling": scope.bounded(hp.normal("els", 0.06, 0.01), minimum=0),
         #"value_loss_scaling": hp.uniform("vls", 0.2, 1.2), # Unavailable for classic.
         "n_envs": scope.bounded(hp.qlognormal("n_envs", log(32)/2, log(32)/8, 1), minimum=1, maximum=32),
         "n_steps": scope.bounded(hp.qlognormal("n_steps", log(16)/2, log(16)/8, 1), minimum=1, maximum=32),
@@ -127,12 +130,12 @@ hp_tuning_effects_debug_overrides = {
 }
 
 def display_hp_tuning_effects(session_name, params, results):
-    display_setting_surface(
-        results["space_hp_returns_mean"],
-        setting_dims=["entropy_loss_scaling", "lr"],
-        zlabel="Mean return",
-        fig_name=f"{session_name}_setting_mean_return",
-    )
+    #display_setting_surface(
+    #    results["space_hp_returns_mean"],
+    #    setting_dims=["entropy_loss_scaling", "lr"],
+    #    zlabel="Mean return",
+    #    fig_name=f"{session_name}_setting_mean_return",
+    #)
 
     try:
         display_setting_cdf_surface(
@@ -175,6 +178,9 @@ def display_hp_tuning_effects(session_name, params, results):
     trial_std = space_hp_cdfs.std(axis=1).mean()
     print(f"[{session_name}] Trial STD / HP std = {trial_std:0.3} / {hp_std:0.3} = {trial_std/hp_std:0.3}")
 
+    display_bootstrapped_random_search_runs(
+        results["space_samples"],
+    )
 
 
 hp_tuning_effects_exp = {

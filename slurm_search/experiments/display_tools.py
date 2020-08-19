@@ -1,3 +1,5 @@
+from math import sqrt
+
 import numpy as np
 from matplotlib import cm, ticker
 import matplotlib.pyplot as plt
@@ -236,6 +238,7 @@ def display_setting_cdf_surface(
 
 def display_setting_samples(
         point_groups,
+        best_choices=None,
         labels=None,
         xlabel=None,
         xscale="linear",
@@ -245,12 +248,16 @@ def display_setting_samples(
         show=False,
 ):
     labels = labels or [f"Group {i+1}" for i in range(len(point_groups))]
-    for point_group, label in zip(point_groups, labels):
+    for group_index, (point_group, label) in enumerate(zip(point_groups, labels)):
         setting_values, setting_returns = zip(*(point_group))
         plt.scatter(setting_values, setting_returns, marker=".", label=label)
 
         # Also mark best as a larger circle.
-        best_setting, best_setting_returns = max(point_group, key=lambda point: point[1])
+        if not best_choices:
+            best_setting, best_setting_returns = max(point_group, key=lambda point: point[1])
+        else:
+            best_setting, best_setting_returns = best_choices[group_index]
+
         plt.scatter(best_setting, best_setting_returns, marker="^", label=label)
 
     if labels:
@@ -272,3 +279,121 @@ def display_setting_samples(
     if fig_name:
         plt.savefig(f"{fig_name}.png")
         plt.clf()
+
+
+def display_runs(
+        setting_runs,
+        labels=None,
+        stdev=False,
+        title=None,
+        fig_name=None,
+        show=False,
+):
+    n_settings, n_runs, n_steps = setting_runs.shape
+
+    for color_index, (label, runs) in enumerate(zip(labels, setting_runs)):
+        color = f"C{color_index}"
+        step_mean = runs.mean(axis=0)
+        step_std = runs.std(axis=0)
+        if stdev:
+            step_std /= sqrt(n_runs)
+
+        step_upper = step_mean + 1 * step_std
+        step_lower = step_mean - 1 * step_std
+
+        steps = np.arange(n_steps) + 1
+        plt.plot(steps, step_mean, label=label, color=color, linestyle='-')
+        plt.plot(steps, step_upper, color=color, linestyle='--')
+        plt.plot(steps, step_lower, color=color, linestyle='--')
+        plt.fill_between(
+            steps,
+            step_lower,
+            step_upper,
+            facecolor=color,
+            alpha=0.15,
+        )
+
+    plt.legend()
+
+    plt.xlabel("Step")
+    plt.ylabel("Estimated Best Performance")
+
+    if title:
+        plt.title(title)
+
+    if fig_name:
+        plt.savefig(f"{fig_name}.png")
+
+    if show:
+        plt.show()
+
+
+def simulated_search(
+        setting_samples,
+        setting_sample_count,
+        run_samples_per_setting,
+):
+    setting_samples = np.array(setting_samples)
+    np.random.shuffle(setting_samples)
+    setting_samples = setting_samples[:setting_sample_count]
+
+    results = []
+    best_setting_index, best_setting_measured_mean = 0, None
+    for setting_index, setting_run_samples in enumerate(setting_samples):
+        current_setting_samples = []
+        for setting_run_sample_index in range(run_samples_per_setting):
+            current_setting_samples.append(
+                np.random.choice(setting_run_samples)
+            )
+            results.append(setting_samples.mean(axis=1)[best_setting_index])
+        measured_mean = np.mean(current_setting_samples)
+        if (best_setting_measured_mean is None
+            or best_setting_measured_mean < measured_mean):
+            best_setting_index = setting_index
+            best_setting_measured_mean = measured_mean
+
+    results.append(setting_samples.mean(axis=1)[best_setting_index])
+
+    return results
+
+def display_bootstrapped_random_search_runs(
+        search_results,
+        search_samples=16,
+        setting_sample_count=16,
+        run_samples_per_setting=6,
+):
+    """
+    Assuming search results (sample hp then seed, gen run) are accurate, display
+    run traces for bootstrapped random search simulations demonstrating the
+    search performance curve for this space (simulated search should be
+    reasonably smaller than the source search.)
+    """
+    setting_samples = np.array([
+        [
+            result
+            for seed, result in hp_results["point_values"] 
+        ]
+        for hp, hp_results in search_results["point_values"]
+    ])
+
+    setting_means = setting_samples.mean(axis=1)
+    settings, setting_runs = setting_samples.shape
+
+    simulated_setting_runs = np.array([[
+        simulated_search(
+            setting_samples,
+            setting_sample_count=setting_sample_count,
+            run_samples_per_setting=run_samples_per_setting,
+        )
+        for search_index in range(search_samples)
+    ]])
+
+    display_runs(
+        simulated_setting_runs,
+        labels=["bootstrap sim'd random searches"],
+        stdev=True,
+        title="Bootstrap-simulated random searches [stdev].",
+        fig_name=f"{search_results['session_name']}_simulated_searches",
+        show=False,
+    )
+    

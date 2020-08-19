@@ -5,7 +5,7 @@ from random import random
 import numpy as np
 
 from all.environments import AtariEnvironment, GymEnvironment
-from all.experiments import ParallelEnvExperiment
+from all.experiments import SingleEnvExperiment, ParallelEnvExperiment
 from all.presets import atari, classic_control, continuous
 
 from slurm_search.experiment import accepts_param_names
@@ -34,6 +34,8 @@ def run_results(env, agent, hp, run_params, run_seed):
     }[env_type]
 
     env = env_func(env_name, device="cuda")
+    if env_name == "MountainCar-v0":
+        env._env._max_episode_steps = 20000
 
     agent_mod = {
         "classic": classic_control,
@@ -42,8 +44,13 @@ def run_results(env, agent, hp, run_params, run_seed):
     }[agent_type]
     agent_func = getattr(agent_mod, agent_name)
 
+    int_hp_keys = {
+        "minibatch_size",
+        "update_frequency",
+    }
+
     hp = {
-        hp_key: (int(hp_value) if hp_key.startswith("n_") else hp_value)
+        hp_key: (int(hp_value) if hp_key.startswith("n_") or hp_key in int_hp_keys else hp_value)
         for hp_key, hp_value in hp.items()
     }
 
@@ -52,13 +59,22 @@ def run_results(env, agent, hp, run_params, run_seed):
         **hp,
     )
 
-    experiment = ParallelEnvExperiment(
-        agent,
-        env,
-        render=False,
-        quiet=True,
-        write_loss=False,
-    )
+    if isinstance(agent, tuple):
+        experiment = ParallelEnvExperiment(
+            agent,
+            env,
+            render=False,
+            quiet=True,
+            write_loss=False,
+        )
+    else:
+        experiment = SingleEnvExperiment(
+            agent,
+            env,
+            render=False,
+            quiet=True,
+            write_loss=False,
+        )
 
     experiment.train(
         frames=train_frames,

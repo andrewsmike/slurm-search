@@ -119,7 +119,8 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
         "array": f"0-{dev_thread_count - 1}",
         "ntasks": 1,
         "mem-per-cpu": 10,
-        "exclude": "node114,node121,node149", # 114 is running really slow. 121 hits CUDA exceptions.
+        # 2020-07-23: 136 hit a cuda error.
+        "exclude": "node114,node116,node121,node136,node149", # 114 is running really slow. 121 hits CUDA exceptions. 
     }
 
     dev_environment = getenv("HOSTNAME", None) == "ernie"
@@ -129,7 +130,7 @@ def launch_slurm_search_workers(session_name, iteration, thread_count=None):
             #"mem-per-cpu": 300,
             #"time": "05:00",
             "time": "03:55:00",
-            "mem-per-cpu": 2500,
+            "mem-per-cpu": 3000,
             "gres": "gpu:1",
             "partition": "1080ti-short",
             "array": f"0-{thread_count - 1}",
@@ -289,6 +290,13 @@ def inspect_slurm_search_state(session_name):
             "Try 'pprint(state)'."
         ),
     )
+
+def del_slurm_search_state_trial(session_name, trial_index):
+    print(f"[{session_name}] Deleting trial #[{trial_index}].")
+    with lock(session_name):
+        state = session_state(session_name)
+        del state["trials"][int(trial_index)]
+        update_session_state(session_name, state)
 
 def display_search_session_logs(session_name, worker_number=None):
     session_name = session_name.split(":")[1]
@@ -563,6 +571,7 @@ def main():
         "stopall": stop_all_slurm_searches,
         "show": display_slurm_search_state,
         "inspect_state": inspect_slurm_search_state,
+        "del_trial": del_slurm_search_state_trial,
         "logs": display_search_session_logs,
         "work_on": work_on_slurm_search,
         "generational_work_on": generational_work_on_slurm_search,

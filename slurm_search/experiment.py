@@ -239,7 +239,7 @@ def run_experiment(name, func, defaults, overrides, resume=None):
                 ).items()
             ])
             print(f"run_exp {name} {args_str} --resume={session_name}")
-            raise ValueError("Bad arguments")
+            #raise ValueError("Bad arguments")
     else:
         session_name = create_experiment(func, defaults, overrides)
 

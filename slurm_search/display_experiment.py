@@ -86,11 +86,16 @@ def display_experiment():
             print(details)
         else:
             for key, value in details.items():
-                print(f"{key}:")
                 if isinstance(value, (tuple, list)):
+                    print(f"{key}:") 
                     for subvalue in value:
                         print(subvalue)
+                elif isinstance(value, dict):
+                    for subkey, subvalue in value.items():
+                        print(f"{key}.{subkey}:")
+                        print(subvalue)
                 else:
+                    print(f"{key}:") 
                     print(value)
         return
 

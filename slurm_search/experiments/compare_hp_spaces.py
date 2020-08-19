@@ -192,6 +192,22 @@ def display_compare_hp_spaces(session_name, params, results):
         trial_std = space_hp_cdfs.std(axis=1).mean()
         print(f"[{session_name}] {space_name} Trial STD / HP std = {trial_std:0.3} / {hp_std:0.3} = {trial_std/hp_std:0.3}")
 
+    label_cdfs = {
+        space_name: space_results["space_returns_cdf"]
+        for space_name, space_results in results.items()
+    }
+
+    labels, cdfs = zip(*label_cdfs.items())
+
+    run_name = f"{params['agent'].split(':')[1]} / {params['env'].split(':')[1]}"
+    display_cdfs(
+        cdfs,
+        labels,
+        title=f"Performance CDFs of HP spaces [{run_name}].",
+        ylabel="Mean HP return",
+        fig_name=f"compare_spaces_cdfs_{session_name}",
+    )
+
 
 
 compare_hp_spaces_exp = {
