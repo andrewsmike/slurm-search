@@ -27,13 +27,13 @@ env_names = {
     "Carnival", "Centipede", "ChopperCommand", "CrazyClimber",
     "DemonAttack", "DoubleDunk", "ElevatorAction", "Enduro",
     "FishingDerby", "Frostbite", "Gopher", "Gravitar",
-    "Hero", "IceHockey", "JamesBond", "JourneyEscape",
+    "Hero", "IceHockey", "Jamesbond", "JourneyEscape",
     "Kangaroo", "Krull", "KungFuMaster", "MontezumaRevenge",
     "MsPacman", "NameThisGame", "Pooyan", "Pong",
-    "PrivateEye", "QBert", "RiverRaid", "RoadRunner",
+    "PrivateEye", "Qbert", "Riverraid", "RoadRunner",
     "Robotank", "Skiing", "StarGunner", "Tennis",
-    "TimePilot", "Tutankham", "UpandDown", "Venture",
-    "VideoPinball", "WizardofWor", "Zaxxon",
+    "TimePilot", "Tutankham", "UpNDown", "Venture",
+    "VideoPinball", "WizardOfWor", "Zaxxon",
 }
 
 DEFAULT_ENV_PATH = (

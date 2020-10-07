@@ -107,14 +107,9 @@ safe_atari_envs = [
     f"atari:{env}"
     for env in sorted(env_names)
     if env not in {
-            # Throw exceptions for whatever reasons.
-            "QBert", "KungFuMaster", "Freeway", "WizardOfWor", # WizardofWar
-            "UpandDown", "JamesBond", "RiverRaid", "Skiing",
-            "Tutankham", "JourneyEscape", "MsPacman", "Asterix",
             # Too slow to complete 2M frames in <4h.
             "VideoPinball", "DoubleDunk", "CrazyClimber", "Hero",
-            # Gravitar
-            # ElevatorAction
+            "Gravitar", "ElevatorAction",
     }
 ]
 
